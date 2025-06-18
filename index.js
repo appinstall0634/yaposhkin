@@ -56,28 +56,74 @@ app.post("/webhook", (req, res) => {
                 console.log("text message: " + msg_body);
                 response_text = "Hi.. I'm Prasath, your message is " + msg_body;
                 
-            } else if (message.type === "order") {
+            } else if (message.type === "order" && message.order) {
                 // Заказ из каталога
                 console.log("Order received from catalog!");
                 console.log("Order details:", JSON.stringify(message.order, null, 2));
                 
                 let order = message.order;
                 let orderText = "🛒 Спасибо за заказ!\n\n";
-                orderText += "📦 Заказ ID: " + order.id + "\n";
-                orderText += "💰 Общая сумма: " + order.total_amount.value + " " + order.total_amount.currency + "\n\n";
-                orderText += "📋 Товары в заказе:\n";
                 
-                order.product_items.forEach((item, index) => {
-                    orderText += `${index + 1}. ${item.product_name}\n`;
-                    orderText += `   Количество: ${item.quantity}\n`;
-                    orderText += `   Цена: ${item.item_price.value} ${item.item_price.currency}\n`;
-                    if (item.sale_amount) {
-                        orderText += `   Скидка: ${item.sale_amount.value} ${item.sale_amount.currency}\n`;
+                // Каталог ID
+                if (order.catalog_id) {
+                    orderText += "📋 Каталог ID: " + order.catalog_id + "\n";
+                }
+                
+                // Текст заказа (если есть)
+                if (order.text && order.text.trim() !== "") {
+                    orderText += "💬 Комментарий: " + order.text + "\n";
+                }
+                
+                // Проверяем наличие товаров
+                if (order.product_items && order.product_items.length > 0) {
+                    orderText += "\n📦 Товары в заказе:\n";
+                    
+                    let totalAmount = 0;
+                    let currency = "";
+                    
+                    order.product_items.forEach((item, index) => {
+                        orderText += `${index + 1}. `;
+                        
+                        // ID товара
+                        if (item.product_retailer_id) {
+                            orderText += `Товар ID: ${item.product_retailer_id}\n`;
+                        }
+                        
+                        // Количество
+                        if (item.quantity) {
+                            orderText += `   Количество: ${item.quantity}\n`;
+                        }
+                        
+                        // Цена
+                        if (item.item_price) {
+                            orderText += `   Цена за единицу: ${item.item_price}`;
+                            if (item.currency) {
+                                orderText += ` ${item.currency}`;
+                                currency = item.currency;
+                            }
+                            orderText += "\n";
+                            
+                            // Подсчитываем общую сумму
+                            if (item.quantity) {
+                                totalAmount += item.item_price * item.quantity;
+                            }
+                        }
+                        
+                        orderText += "\n";
+                    });
+                    
+                    // Общая сумма
+                    if (totalAmount > 0) {
+                        orderText += `💰 Общая сумма: ${totalAmount} ${currency}\n\n`;
                     }
-                    orderText += "\n";
-                });
+                    
+                } else {
+                    orderText += "\n📦 Товары в заказе: информация недоступна\n\n";
+                }
                 
-                orderText += "✅ Ваш заказ принят в обработку. Мы свяжемся с вами в ближайшее время!";
+                orderText += "✅ Ваш заказ принят в обработку. Мы свяжемся с вами в ближайшее время!\n";
+                orderText += "📞 Контакт: " + from;
+                
                 response_text = orderText;
                 
             } else if (message.type === "interactive") {
