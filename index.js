@@ -156,6 +156,9 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
 
         // Отправляем приветствие
         await sendGreeting(phone_no_id, from, orderData);
+        console.log('Приветствие оут');
+        await sendCatalog(phone_no_id, from);
+        console.log('Каталог оут');
         
         // Ждем 2 секунды и отправляем каталог
         setTimeout(async () => {
@@ -176,6 +179,7 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
 
 // Асинхронная функция отправки приветствия
 async function sendGreeting(phone_no_id, to, orderData) {
+    console.log('Приветствие ин 1');
     const greetingText = `🎉 Спасибо, ${orderData.customer_name}!
 
 ✅ Ваши данные успешно сохранены:
@@ -185,6 +189,7 @@ async function sendGreeting(phone_no_id, to, orderData) {
 💳 Способ оплаты: ${getPaymentMethodName(orderData.payment_method)}
 
 Сейчас отправлю вам наш каталог для выбора блюд! 🍣`;
+console.log('Приветствие ин 2');
 
     return await sendMessage(phone_no_id, to, greetingText);
 }
