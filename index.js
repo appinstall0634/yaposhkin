@@ -157,8 +157,6 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
         // Отправляем приветствие
         await sendGreeting(phone_no_id, from, orderData);
         console.log('Приветствие оут');
-        await sendCatalog(phone_no_id, from);
-        console.log('Каталог оут');
         
         // Ждем 2 секунды и отправляем каталог
         setTimeout(async () => {
