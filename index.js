@@ -82,7 +82,7 @@ function sendFlowMessage(phone_no_id, to) {
                 parameters: {
                     flow_message_version: "3",
                     flow_token: "unused",
-                    flow_id: "yaposhflows",
+                    flow_id: "714583031203049",
                     flow_cta: "Заполнить форму",
                     flow_action: "navigate"
                 }
