@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Конвертер меню в каталог WhatsApp</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 50px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #25D366;
+        }
+        .btn {
+            background: #25D366;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #128C7E;
+        }
+        .info {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #25D366;
+        }
+        .result {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+        }
+        .step {
+            background: #fff3cd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍣 Конвертер меню Yaposhkin Rolls</h1>
+        <p>Конвертирует JSON файл меню в CSV формат для каталога WhatsApp Business</p>
+        
+        <div class="info">
+            <h3>📋 Что делает конвертер:</h3>
+            <ul>
+                <li><strong>link:</strong> https://yaposhkinrolls.com/product/{id}</li>
+                <li><strong>brand:</strong> Yaposhkin Rolls</li>
+                <li><strong>availability:</strong> in stock</li>
+                <li><strong>condition:</strong> new</li>
+                <li><strong>price:</strong> из sales[0].priceExternal + " KGS"</li>
+                <li><strong>image_link:</strong> https://ve738.quickresto.ru/wlcrm + imageUrl</li>
+                <li><strong>item_group_id:</strong> только group_{groupId} или пустое</li>
+            </ul>
+            
+            <h4>🗂️ Категории продуктов (только русские):</h4>
+            <ul>
+                <li><strong>Напитки:</strong> ID 14, 27, 39</li>
+                <li><strong>Сеты:</strong> ID 11, 24, 36, 40 (теплые сеты)</li>
+                <li><strong>Роллы классические:</strong> ID 1, 8, 16, 21, 28, 33</li>
+                <li><strong>Теплые роллы:</strong> ID 2, 17, 29</li>
+                <li><strong>Темпура роллы:</strong> ID 6, 20, 32</li>
+                <li><strong>Роллы без риса:</strong> ID 3, 18, 30</li>
+                <li><strong>Суши и гунканы:</strong> ID 5, 19, 31</li>
+                <li><strong>Сладкие роллы:</strong> ID 9, 22, 34</li>
+                <li><strong>Салаты:</strong> ID 10, 23, 35</li>
+                <li><strong>Новинки:</strong> ID 12, 25, 37</li>
+                <li><strong>Дополнительно:</strong> ID 4 (круассаны), 13, 26, 38 (соусы)</li>
+            </ul>
+            <p><em>⚠️ Обрабатываются только товары с locationId: 1 в массиве sales</em></p>
+        </div>
+
+        <div class="step">
+            <h3>📁 Способ 1: Загрузить JSON файл</h3>
+            <div class="upload-area" id="uploadArea">
+                <p>📂 Перетащите JSON файл сюда или</p>
+                <input type="file" id="jsonFile" accept=".json" style="display: none;">
+                <button class="btn" onclick="document.getElementById('jsonFile').click()">
+                    Выбрать файл
+                </button>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>✏️ Способ 2: Вставить JSON текст</h3>
+            <textarea id="jsonText" placeholder="Вставьте сюда ваш JSON..."></textarea>
+            <br>
+            <button class="btn" onclick="convertFromText()">
+                Конвертировать текст
+            </button>
+        </div>
+
+        <div class="step">
+            <h3>🧪 Способ 3: Тест с примером</h3>
+            <button class="btn" onclick="testConversion()">
+                Запустить тест
+            </button>
+        </div>
+        
+        <div id="result" class="result" style="display: none;">
+            <h3>📊 Результат:</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Конвертер JSON в CSV
+        function convertMenuJsonToCSV(jsonData) {
+            const BASE_LINK = "https://yaposhkinrolls.com";
+            const BRAND = "Yaposhkin Rolls";
+            const AVAILABILITY = "in stock";
+            const CONDITION = "new";
+            const IMAGE_BASE_URL = "https://ve738.quickresto.ru/wlcrm";
+            
+            const headers = [
+                "id", "title", "description", "availability", 
+                "condition", "price", "link", "image_link", "brand",
+                "google_product_category", "fb_product_category", "item_group_id"
+            ];
+            
+            function getCategory(groupId, title) {
+                const categories = {
+                    14: { google: "Food, Beverages & Tobacco > Beverages", fb: "Напитки" },
+                    27: { google: "Food, Beverages & Tobacco > Beverages", fb: "Напитки" },
+                    39: { google: "Food, Beverages & Tobacco > Beverages", fb: "Напитки" },
+                    11: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сеты" },
+                    24: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сеты" },
+                    36: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сеты" },
+                    40: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Теплые сеты" },
+                    1: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы" },
+                    8: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Классические роллы" },
+                    16: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы" },
+                    21: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Классические Роллы" },
+                    28: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы" },
+                    33: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Классические Роллы" },
+                    2: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Теплые роллы" },
+                    17: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Теплые роллы" },
+                    29: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Теплые роллы" },
+                    6: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Темпура роллы" },
+                    20: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Темпура роллы" },
+                    32: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Темпура роллы" },
+                    3: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы без риса" },
+                    18: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы без риса" },
+                    30: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы без риса" },
+                    5: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Суши и гунканы" },
+                    19: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Суши и Гунканы" },
+                    31: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Суши и Гунканы" },
+                    9: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сладкие роллы" },
+                    22: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сладкие Роллы" },
+                    34: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сладкие Роллы" },
+                    10: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Салаты" },
+                    23: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Салаты" },
+                    35: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Салаты" },
+                    12: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Новинки" },
+                    25: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Новинки" },
+                    37: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Новинки" },
+                    4: { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Круассаны" },
+                    13: { google: "Food, Beverages & Tobacco > Food Items > Accessories", fb: "Дополнительно" },
+                    26: { google: "Food, Beverages & Tobacco > Food Items > Accessories", fb: "Доп соус и приборы" },
+                    38: { google: "Food, Beverages & Tobacco > Food Items > Accessories", fb: "Доп соус и приборы" }
+                };
+                
+                if (categories[groupId]) return categories[groupId];
+                
+                const titleLower = title.toLowerCase();
+                if (titleLower.includes('сет') || titleLower.includes('set')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сеты" };
+                if (titleLower.includes('напиток') || titleLower.includes('кола') || titleLower.includes('спрайт') || titleLower.includes('фанта') || titleLower.includes('чай') || titleLower.includes('сок')) return { google: "Food, Beverages & Tobacco > Beverages", fb: "Напитки" };
+                if (titleLower.includes('темпура') || titleLower.includes('tempura')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Темпура роллы" };
+                if (titleLower.includes('теплый') || titleLower.includes('теплые') || titleLower.includes('запеченный')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Теплые роллы" };
+                if (titleLower.includes('суши') || titleLower.includes('гункан')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Суши и гунканы" };
+                if (titleLower.includes('салат')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Салаты" };
+                if (titleLower.includes('сладкий') || titleLower.includes('сладкие')) return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Сладкие роллы" };
+                
+                return { google: "Food, Beverages & Tobacco > Food Items > Prepared Foods", fb: "Роллы" };
+            }
+            
+            function getItemGroupId(item) {
+                // Используем только groupId из JSON
+                if (item.groupId) {
+                    return `group_${item.groupId}`;
+                }
+                
+                // Если нет groupId, возвращаем пустую строку
+                return '';
+            }
+
+            function isAvailableForLocation1(sales) {
+                if (!sales || sales.length === 0) return false;
+                return sales.some(sale => sale.locationId === 1);
+            }
+            
+            function cleanDescription(description) {
+                if (!description) return "";
+                return description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            }
+            
+            function getPrice(sales) {
+                if (!sales || sales.length === 0) return "0 KGS";
+                
+                const firstSale = sales[0];
+                const price = firstSale.priceExternal || firstSale.price || 0;
+                
+                let formattedPrice = price;
+                if (price > 1000) {
+                    formattedPrice = (price / 100).toFixed(0);
+                }
+                
+                return `${formattedPrice} KGS`;
+            }
+            
+            function getImageLink(imageUrl) {
+                if (!imageUrl) return "";
+                return IMAGE_BASE_URL + imageUrl;
+            }
+            
+            let data;
+            try {
+                data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+            } catch (error) {
+                throw new Error('Ошибка парсинга JSON: ' + error.message);
+            }
+            
+            const items = data.data || data;
+            if (!Array.isArray(items)) {
+                throw new Error('Данные должны быть массивом');
+            }
+            
+            const csvRows = [headers.join(',')];
+            
+            items.forEach(item => {
+                // Проверяем доступность для locationId: 1
+                if (!isAvailableForLocation1(item.sales)) {
+                    return; // Пропускаем товар
+                }
+                
+                const category = getCategory(item.groupId, item.title || '');
+                const row = [
+                    item.id || '',
+                    `"${(item.title || '').replace(/"/g, '""')}"`,
+                    `"${cleanDescription(item.description).replace(/"/g, '""')}"`,
+                    AVAILABILITY,
+                    CONDITION,
+                    getPrice(item.sales),
+                    BASE_LINK,
+                    getImageLink(item.imageUrl),
+                    BRAND,
+                    category.google,
+                    category.fb,
+                    getItemGroupId(item)
+                ];
+                csvRows.push(row.join(','));
+            });
+            
+            return csvRows.join('\n');
+        }
+
+        function downloadCSV(csvContent, filename = 'yaposhkin_rolls_catalog.csv') {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showResult(`✅ Файл ${filename} скачан!`, 'Проверьте папку "Загрузки"');
+        }
+
+        function showResult(title, content) {
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('resultContent').innerHTML = `
+                <h4>${title}</h4>
+                <p>${content}</p>
+            `;
+        }
+
+        function processJsonFile(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const csvContent = convertMenuJsonToCSV(e.target.result);
+                    downloadCSV(csvContent);
+                } catch (error) {
+                    showResult('❌ Ошибка', error.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        function convertFromText() {
+            const jsonText = document.getElementById('jsonText').value.trim();
+            
+            if (!jsonText) {
+                showResult('⚠️ Внимание', 'Пожалуйста, вставьте JSON текст');
+                return;
+            }
+            
+            try {
+                const csvContent = convertMenuJsonToCSV(jsonText);
+                downloadCSV(csvContent);
+            } catch (error) {
+                showResult('❌ Ошибка', error.message);
+            }
+        }
+        
+        // Обработка загрузки файла
+        document.getElementById('jsonFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                showResult('⏳ Обработка', 'Конвертируем файл...');
+                processJsonFile(file);
+            }
+        });
+
+        // Drag & Drop
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#25D366';
+        });
+        
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#ccc';
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#ccc';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'application/json' || file.name.endsWith('.json')) {
+                    showResult('⏳ Обработка', 'Конвертируем файл...');
+                    processJsonFile(file);
+                } else {
+                    showResult('⚠️ Неверный тип файла', 'Пожалуйста, загрузите JSON файл');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
