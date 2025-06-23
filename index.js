@@ -231,6 +231,90 @@ async function sendCatalog(phone_no_id, to) {
     }
 }
 
+// Универсальная асинхронная функция отправки текстового сообщения
+async function sendMessage(phone_no_id, to, text) {
+    try {
+        const response = await axios({
+            method: "POST",
+            url: "https://graph.facebook.com/v22.0/" + phone_no_id + "/messages?access_token=" + token,
+            data: {
+                messaging_product: "whatsapp",
+                to: to,
+                text: {
+                    body: text
+                }
+            },
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
+        
+        console.log("✅ Сообщение отправлено:", response.data);
+        return response.data;
+    } catch (error) {
+        console.error("❌ Ошибка отправки сообщения:");
+        console.error("Status:", error.response?.status);
+        console.error("Data:", error.response?.data);
+        throw error;
+    }
+}
+
+// Функция отправки каталога
+function sendCatalog(phone_no_id, to) {
+    const catalogData = {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "interactive",
+        interactive: {
+            type: "catalog_message",
+            body: {
+                text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
+            },
+            footer: {
+                text: "Доставка 30-40 минут"
+            },
+            action: {
+                name: "catalog_message"
+            }
+        }
+    };
+
+    axios({
+        method: "POST",
+        url: "https://graph.facebook.com/v22.0/" + phone_no_id + "/messages?access_token=" + token,
+        data: catalogData,
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then(response => {
+        console.log("Каталог отправлен успешно:", response.data);
+    }).catch(error => {
+        console.error("Ошибка отправки каталога:", error.response?.data || error.message);
+    });
+}
+
+// Универсальная функция отправки текстового сообщения
+function sendMessage(phone_no_id, to, text) {
+    axios({
+        method: "POST",
+        url: "https://graph.facebook.com/v22.0/" + phone_no_id + "/messages?access_token=" + token,
+        data: {
+            messaging_product: "whatsapp",
+            to: to,
+            text: {
+                body: text
+            }
+        },
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then(response => {
+        console.log("Сообщение отправлено:", response.data);
+    }).catch(error => {
+        console.error("Ошибка отправки сообщения:", error.response?.data || error.message);
+    });
+}
+
 // Вспомогательные функции
 function getAreaName(areaCode) {
     const areas = {
