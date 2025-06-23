@@ -67,6 +67,7 @@ app.post("/webhook", (req, res) => {
 
 // Функция отправки Flow
 function sendFlowMessage(phone_no_id, to) {
+    console.log("send flow is ok 1");
     const flowData = {
         messaging_product: "whatsapp",
         to: to,
@@ -92,6 +93,7 @@ function sendFlowMessage(phone_no_id, to) {
         }
     };
 
+    console.log("send flow is ok 2");
     axios({
         method: "POST",
         url: "https://graph.facebook.com/v22.0/" + phone_no_id + "/messages?access_token=" + token,
@@ -100,10 +102,13 @@ function sendFlowMessage(phone_no_id, to) {
             "Content-Type": "application/json"
         }
     }).then(response => {
+        console.log("send flow is ok 3");
         console.log("Flow отправлен успешно:", response.data);
     }).catch(error => {
+        console.log("send flow is ok 4");
         console.error("Ошибка отправки Flow:", error.response?.data || error.message);
     });
+    console.log("send flow is ok 5");
 }
 
 // Функция обработки ответа от Flow
