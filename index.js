@@ -49,9 +49,11 @@ app.post("/webhook", (req, res) => {
 
             // Проверяем тип сообщения
             if (message.type === "interactive" && message.interactive.type === "nfm_reply") {
+                console.log("send catalog is ok");
                 // Ответ от Flow - отправляем приветствие и каталог
                 handleFlowResponse(phone_no_id, from, message, body_param);
             } else {
+                console.log("send flow is ok");
                 // Любое другое сообщение - отправляем Flow
                 sendFlowMessage(phone_no_id, from);
             }
