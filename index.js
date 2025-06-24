@@ -37,6 +37,7 @@ app.get("/webhook", (req, res) => {
 app.post("/webhook", async (req, res) => {
     let body_param = req.body;
 
+    console.log("=== ПОЛУЧЕННОЕ СООБЩЕНИЕ ===");
     console.log(JSON.stringify(body_param, null, 2));
 
     if (body_param.object) {
@@ -52,20 +53,37 @@ app.post("/webhook", async (req, res) => {
 
             console.log("phone number " + phone_no_id);
             console.log("from " + from);
+            console.log("message type:", message.type);
             console.log("message:", JSON.stringify(message, null, 2));
 
             try {
                 // Проверяем тип сообщения
                 if (message.type === "interactive") {
+                    console.log("Interactive message type:", message.interactive.type);
+                    
                     if (message.interactive.type === "nfm_reply") {
                         // Ответ от Flow
+                        console.log("🔄 Обрабатываем ответ от Flow");
                         await handleFlowResponse(phone_no_id, from, message, body_param);
                     } else if (message.interactive.type === "product_list_reply") {
                         // Ответ от каталога - отправляем подтверждение заказа и order flow
+                        console.log("🛒 Обрабатываем ответ от каталога (product_list)");
                         await handleCatalogResponse(phone_no_id, from, message);
+                    } else if (message.interactive.type === "button_reply") {
+                        // Ответ от кнопки
+                        console.log("🔘 Обрабатываем ответ от кнопки");
+                        await handleButtonResponse(phone_no_id, from, message);
+                    } else {
+                        console.log("❓ Неизвестный тип interactive сообщения:", message.interactive.type);
+                        await handleIncomingMessage(phone_no_id, from, message);
                     }
+                } else if (message.type === "order") {
+                    // Ответ от каталога в формате order
+                    console.log("🛒 Обрабатываем ответ от каталога (order)");
+                    await handleCatalogOrderResponse(phone_no_id, from, message);
                 } else {
                     // Любое другое сообщение - проверяем клиента и отправляем каталог
+                    console.log("📝 Обрабатываем обычное сообщение");
                     await handleIncomingMessage(phone_no_id, from, message);
                 }
             } catch (error) {
@@ -85,13 +103,10 @@ async function handleIncomingMessage(phone_no_id, from, message) {
     
     const messageText = message.text?.body?.toLowerCase();
     
-    // Проверяем если это команда для заказа
-    if (messageText && (messageText.includes('заказ') || messageText.includes('меню') || messageText.includes('каталог'))) {
-        await checkCustomerAndSendFlow(phone_no_id, from);
-    } else {
-        // Для любого другого сообщения тоже проверяем клиента
-        await checkCustomerAndSendFlow(phone_no_id, from);
-    }
+    // Проверяем если это команда для заказа или любое текстовое сообщение
+    console.log(`Получено сообщение от ${from}: ${messageText || 'не текст'}`);
+    
+    await checkCustomerAndSendFlow(phone_no_id, from);
 }
 
 // Проверка клиента и отправка соответствующего Flow
@@ -176,22 +191,78 @@ async function sendExistingCustomerGreeting(phone_no_id, from, customer) {
     }, 1000);
 }
 
+// Обработка ответа от каталога в формате order
+async function handleCatalogOrderResponse(phone_no_id, from, message) {
+    try {
+        console.log("=== ОТВЕТ ОТ КАТАЛОГА (ORDER FORMAT) ===");
+        console.log("Order message:", JSON.stringify(message, null, 2));
+        
+        const order = message.order;
+        
+        // Формируем информацию о заказе
+        let orderSummary = "🛒 Ваш заказ:\n\n";
+        let totalAmount = 0;
+        
+        if (order && order.product_items) {
+            order.product_items.forEach((item, index) => {
+                orderSummary += `${index + 1}. ${item.product_retailer_id}\n`;
+                orderSummary += `   Количество: ${item.quantity}\n`;
+                if (item.item_price) {
+                    orderSummary += `   Цена: ${item.item_price} ${item.currency || 'KGS'}\n`;
+                    totalAmount += parseFloat(item.item_price) * item.quantity;
+                }
+                orderSummary += "\n";
+            });
+        }
+        
+        orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n`;
+        orderSummary += "\n📍 Теперь выберите способ получения заказа:";
+        
+        await sendMessage(phone_no_id, from, orderSummary);
+        
+        // Отправляем order flow через 2 секунды
+        setTimeout(async () => {
+            await sendOrderFlow(phone_no_id, from);
+        }, 2000);
+        
+    } catch (error) {
+        console.error("Ошибка обработки order ответа каталога:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка при обработке заказа. Попробуйте еще раз.");
+    }
+}
+
+// Обработка ответа от кнопок
+async function handleButtonResponse(phone_no_id, from, message) {
+    try {
+        console.log("=== ОТВЕТ ОТ КНОПКИ ===");
+        const buttonId = message.interactive.button_reply.id;
+        
+        if (buttonId === "order_flow") {
+            await sendOrderFlow(phone_no_id, from);
+        }
+    } catch (error) {
+        console.error("Ошибка обработки ответа кнопки:", error);
+    }
+}
+
 // Обработка ответа от каталога
 async function handleCatalogResponse(phone_no_id, from, message) {
     try {
-        console.log("=== ОТВЕТ ОТ КАТАЛОГА ===");
+        console.log("=== ОТВЕТ ОТ КАТАЛОГА (PRODUCT LIST) ===");
         console.log("Catalog response:", JSON.stringify(message.interactive, null, 2));
         
         const productListReply = message.interactive.product_list_reply;
         
         // Формируем информацию о заказе
         let orderSummary = "🛒 Ваш заказ:\n\n";
-        let totalAmount = 0;
         
         // Здесь должна быть логика подсчета стоимости из вашего каталога
-        // Пока что показываем примерную информацию
         orderSummary += "📋 Выбранные товары:\n";
-        orderSummary += `• ${productListReply.title || 'Выбранные блюда'}\n`;
+        if (productListReply.single_product_reply) {
+            orderSummary += `• ${productListReply.single_product_reply.product_retailer_id}\n`;
+        } else {
+            orderSummary += `• Выбранные блюда\n`;
+        }
         orderSummary += "\n💰 Стоимость: уточняется\n";
         orderSummary += "\n📍 Теперь выберите способ получения заказа:";
         
