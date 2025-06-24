@@ -205,28 +205,29 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         
         if (order && order.product_items) {
             console.log("=== ДЕТАЛИ ТОВАРОВ ===");
-            order.product_items.forEach((item, index) => {
+            
+            // Обрабатываем товары последовательно, чтобы получить названия из API
+            for (let index = 0; index < order.product_items.length; index++) {
+                const item = order.product_items[index];
                 console.log(`Товар ${index + 1}:`, JSON.stringify(item, null, 2));
                 
-                // Используем название товара из WhatsApp ответа, если есть
-                const productName = item.product_name || 
-                                  item.product_title || 
-                                  item.title || 
-                                  item.name ||
-                                  `Товар ${item.product_retailer_id}`;
+                // Получаем информацию о товаре из API
+                const productInfo = await getProductInfo(item.product_retailer_id);
                 
+                const productName = productInfo.title || `Товар ${item.product_retailer_id}`;
                 console.log(`Название товара: ${productName}`);
                 
                 orderSummary += `${index + 1}. ${productName}\n`;
-                orderSummary += `   Количество: ${item.quantity}\n`;
+                orderSummary += `Количество: ${item.quantity} ${productInfo.measure_unit || 'шт'}\n`;
                 
                 if (item.item_price) {
                     const itemTotal = parseFloat(item.item_price) * item.quantity;
-                    orderSummary += `   Цена: ${item.item_price} ${item.currency || 'KGS'} x ${item.quantity} = ${itemTotal} ${item.currency || 'KGS'}\n`;
+                    orderSummary += `Цена: ${item.item_price} ${item.currency || 'KGS'} x ${item.quantity} = ${itemTotal} ${item.currency || 'KGS'}\n`;
                     totalAmount += itemTotal;
                 }
+                
                 orderSummary += "\n";
-            });
+            }
         }
         
         orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n`;
@@ -475,6 +476,81 @@ async function handleLegacyFlowResponse(phone_no_id, from, flowResponse, custome
     setTimeout(async () => {
         await sendCatalog(phone_no_id, from);
     }, 2000);
+}
+
+// Кэш товаров для оптимизации
+let productsCache = null;
+let cacheExpiry = null;
+
+// Получение всех товаров и кэширование
+async function getAllProducts() {
+    try {
+        // Проверяем кэш (обновляем каждые 30 минут)
+        if (productsCache && cacheExpiry && Date.now() < cacheExpiry) {
+            console.log("📦 Используем кэшированные товары");
+            return productsCache;
+        }
+        
+        console.log("🔄 Загружаем товары из API");
+        const response = await axios.get(`${TEMIR_API_BASE}/qr/products`);
+        const products = response.data;
+        
+        // Создаем мапу для быстрого поиска по ID
+        const productsMap = {};
+        products.forEach(product => {
+            productsMap[product.id] = {
+                id: product.id,
+                api_id: product.api_id,
+                title: product.title,
+                measure_unit: product.measure_unit_title || 'шт'
+            };
+        });
+        
+        // Кэшируем на 30 минут
+        productsCache = productsMap;
+        cacheExpiry = Date.now() + (30 * 60 * 1000);
+        
+        console.log(`✅ Загружено ${products.length} товаров`);
+        return productsMap;
+        
+    } catch (error) {
+        console.error("❌ Ошибка загрузки товаров:", error.response?.status, error.response?.data);
+        return productsCache || {}; // Возвращаем старый кэш если есть
+    }
+}
+
+// Получение информации о товаре по ID
+async function getProductInfo(productId) {
+    try {
+        const products = await getAllProducts();
+        
+        if (products[productId]) {
+            console.log(`✅ Товар найден в кэше: ${products[productId].title}`);
+            return products[productId];
+        } else {
+            console.log(`❓ Товар ${productId} не найден в кэше, запрашиваем отдельно`);
+            
+            // Fallback - запрашиваем конкретный товар
+            const response = await axios.get(`${TEMIR_API_BASE}/qr/products/${productId}`);
+            const product = response.data;
+            
+            return {
+                id: product.id,
+                api_id: product.api_id,
+                title: product.title,
+                measure_unit: product.measure_unit_title || 'шт'
+            };
+        }
+        
+    } catch (error) {
+        console.error(`❌ Ошибка получения товара ${productId}:`, error.response?.status);
+        
+        return {
+            id: productId,
+            title: `Товар ${productId}`,
+            measure_unit: 'шт'
+        };
+    }
 }
 
 // Получение информации о филиалах
