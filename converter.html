@@ -257,7 +257,7 @@
                 throw new Error('Ошибка парсинга JSON: ' + error.message);
             }
             
-            const items = data.data || data;
+            const items = data;
             if (!Array.isArray(items)) {
                 throw new Error('Данные должны быть массивом');
             }
