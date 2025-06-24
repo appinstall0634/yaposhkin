@@ -204,12 +204,26 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         let totalAmount = 0;
         
         if (order && order.product_items) {
+            console.log("=== ДЕТАЛИ ТОВАРОВ ===");
             order.product_items.forEach((item, index) => {
-                orderSummary += `${index + 1}. ${item.product_retailer_id}\n`;
+                console.log(`Товар ${index + 1}:`, JSON.stringify(item, null, 2));
+                
+                // Используем название товара из WhatsApp ответа, если есть
+                const productName = item.product_name || 
+                                  item.product_title || 
+                                  item.title || 
+                                  item.name ||
+                                  `Товар ${item.product_retailer_id}`;
+                
+                console.log(`Название товара: ${productName}`);
+                
+                orderSummary += `${index + 1}. ${productName}\n`;
                 orderSummary += `   Количество: ${item.quantity}\n`;
+                
                 if (item.item_price) {
-                    orderSummary += `   Цена: ${item.item_price} ${item.currency || 'KGS'}\n`;
-                    totalAmount += parseFloat(item.item_price) * item.quantity;
+                    const itemTotal = parseFloat(item.item_price) * item.quantity;
+                    orderSummary += `   Цена: ${item.item_price} ${item.currency || 'KGS'} x ${item.quantity} = ${itemTotal} ${item.currency || 'KGS'}\n`;
+                    totalAmount += itemTotal;
                 }
                 orderSummary += "\n";
             });
