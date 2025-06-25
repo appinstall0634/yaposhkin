@@ -794,6 +794,7 @@ const encryptResponse = (response, aesKeyBuffer, initialVectorBuffer) => {
 };
 
 // Обработка Flow данных
+// ИСПРАВЛЕННАЯ функция processFlowData для правильной структуры данных
 async function processFlowData(data) {
     console.log("🔄 Processing flow data:", data);
     
@@ -801,6 +802,7 @@ async function processFlowData(data) {
         const { version, action, flow_token, data: flowData, screen } = data;
         
         console.log(`Processing: version=${version}, action=${action}, screen=${screen}, token=${flow_token}`);
+        console.log("Raw flowData:", flowData); // Отладка
 
         switch (action) {
             case "ping":
@@ -813,6 +815,7 @@ async function processFlowData(data) {
 
             case "INIT":
                 console.log("🚀 Flow initialization");
+                
                 if (flow_token && flow_token.includes("new_customer")) {
                     return {
                         screen: "registration",
@@ -822,11 +825,18 @@ async function processFlowData(data) {
                         }
                     };
                 } else if (flow_token && flow_token.includes("order")) {
+                    // Получаем данные из flow_action_payload
+                    const userAddress = flowData?.user_address || "ул. Исы Ахунбаева 125в, кв. 10";
+                    const userPhone = flowData?.user_phone || "";
+                    
+                    console.log("📍 User address from payload:", userAddress);
+                    console.log("📞 User phone from payload:", userPhone);
+                    
                     return {
-                        screen: "order_details", 
+                        screen: "ORDER_TYPE", // ИСПРАВЛЕНО: используем ID из JSON
                         data: {
-                            flow_type: "order",
-                            branches: await getBranchesForFlow()
+                            // ИСПРАВЛЕНО: структура данных должна соответствовать JSON Flow
+                            user_address: userAddress  // Это будет доступно как ${data.user_address}
                         }
                     };
                 }
@@ -860,14 +870,62 @@ async function processFlowData(data) {
     }
 }
 
-// Обработка обмена данными между экранами
+// ИСПРАВЛЕННАЯ функция handleDataExchange
 async function handleDataExchange(screen, data, flow_token) {
     console.log(`📋 Data exchange for screen: ${screen}`, data);
     
     try {
         switch (screen) {
+            case "ORDER_TYPE":
+                // Переход с первого экрана на второй
+                return {
+                    screen: "DELIVERY_OPTIONS",
+                    data: {
+                        order_type: data.order_type,
+                        user_address: data.user_address || "ул. Исы Ахунбаева 125в, кв. 10"
+                    }
+                };
+
+            case "DELIVERY_OPTIONS":
+                // Переход со второго экрана на третий
+                return {
+                    screen: "PROMO_AND_TIME",
+                    data: {
+                        order_type: data.order_type,
+                        user_address: data.user_address,
+                        branch: data.branch,
+                        delivery_choice: data.delivery_choice,
+                        new_address: data.new_address
+                    }
+                };
+
+            case "PROMO_AND_TIME":
+                // Завершение Flow - этот случай обрабатывается через "complete" action
+                // Но на всякий случай обрабатываем и здесь
+                return {
+                    screen: "SUCCESS",
+                    data: {
+                        extension_message_response: {
+                            params: {
+                                flow_token: flow_token,
+                                flow_type: "existing_customer",
+                                order_type: data.order_type,
+                                user_address: data.user_address,
+                                branch: data.branch,
+                                delivery_choice: data.delivery_choice,
+                                new_address: data.new_address,
+                                preparation_time: data.preparation_time,
+                                specific_time: data.specific_time,
+                                promo_code: data.promo_code,
+                                comment: data.comment,
+                                order_complete: true
+                            }
+                        }
+                    }
+                };
+
             case "registration":
-                // Валидация регистрационных данных
+                // Обработка регистрационного Flow (для совместимости)
                 const errors = [];
                 
                 if (!data.first_name || data.first_name.trim().length < 2) {
@@ -887,13 +945,13 @@ async function handleDataExchange(screen, data, flow_token) {
                     };
                 }
                 
-                // Успешная регистрация
                 return {
                     screen: "SUCCESS",
                     data: {
                         extension_message_response: {
                             params: {
                                 flow_token: flow_token,
+                                flow_type: "new_customer",
                                 customer_name: data.first_name,
                                 customer_address: data.address,
                                 registration_complete: true
@@ -902,49 +960,12 @@ async function handleDataExchange(screen, data, flow_token) {
                     }
                 };
 
-            case "order_details":
-                // Валидация заказа
-                const orderErrors = [];
-                
-                if (!data.order_type || !["delivery", "pickup"].includes(data.order_type)) {
-                    orderErrors.push("Выберите тип получения заказа");
-                }
-                
-                if (data.order_type === "pickup" && !data.branch) {
-                    orderErrors.push("Выберите филиал для самовывоза");
-                }
-                
-                if (orderErrors.length > 0) {
-                    return {
-                        screen: "order_details",
-                        data: {
-                            error_message: orderErrors.join(", ")
-                        }
-                    };
-                }
-                
-                // Успешное оформление заказа
-                return {
-                    screen: "SUCCESS",
-                    data: {
-                        extension_message_response: {
-                            params: {
-                                flow_token: flow_token,
-                                order_type: data.order_type,
-                                branch_id: data.branch || null,
-                                delivery_address: data.delivery_address || null,
-                                preparation_time: data.preparation_time || "asap",
-                                order_complete: true
-                            }
-                        }
-                    }
-                };
-
             default:
+                console.log(`❓ Unknown screen: ${screen}`);
                 return {
-                    screen: "welcome",
+                    screen: "ORDER_TYPE",
                     data: {
-                        message: "Добро пожаловать!"
+                        user_address: "ул. Исы Ахунбаева 125в, кв. 10"
                     }
                 };
         }
@@ -953,7 +974,8 @@ async function handleDataExchange(screen, data, flow_token) {
         return {
             screen: screen,
             data: {
-                error_message: "Произошла ошибка. Попробуйте еще раз."
+                error_message: "Произошла ошибка. Попробуйте еще раз.",
+                user_address: data.user_address || "ул. Исы Ахунбаева 125в, кв. 10"
             }
         };
     }
