@@ -322,7 +322,7 @@ async function sendOrderFlow(phone_no_id, from) {
             name: "flow",
             parameters: {
                 flow_message_version: "3",
-                flow_token: `order_${from}_${Date.now()}`,
+                flow_token: `123456`,
                 flow_id: ORDER_FLOW_ID,
                 flow_cta: "Оформить заказ",
                 flow_action: "data_exchange",
