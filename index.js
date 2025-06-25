@@ -324,8 +324,15 @@ async function sendOrderFlow(phone_no_id, from) {
                 flow_message_version: "3",
                 flow_token: `order_${from}_${Date.now()}`,
                 flow_id: ORDER_FLOW_ID,
-                flow_cta: "Оформить заказ"
-                // Убираем flow_action - тогда Flow запустится с INIT
+                flow_cta: "Оформить заказ",
+                flow_action: "data_exchange",
+                flow_action_payload: {
+                    data: {
+                        user_address: "ул. Исы Ахунбаева 125в, кв. 10",
+                        user_phone: from,
+                        order_type: "delivery"
+                    }
+                }
             }
         }
     }
