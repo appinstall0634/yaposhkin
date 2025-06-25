@@ -148,36 +148,33 @@ async function sendNewCustomerFlow(phone_no_id, from) {
     console.log("=== ОТПРАВКА FLOW ДЛЯ НОВЫХ КЛИЕНТОВ ===");
     
     const flowData = {
-    messaging_product: "whatsapp",
-    to: from,
-    type: "interactive",
-    interactive: {
-        type: "flow",
-        header: {
-            type: "text",
-            text: "🍣 Yaposhkin Rolls"
-        },
-        body: {
-            text: "Добро пожаловать!"
-        },
-        footer: {
-            text: "Заполните форму регистрации"
-        },
-        action: {
-            name: "flow",
-            parameters: {
-                flow_message_version: "3",
-                flow_token: `new_customer_${Date.now()}`,
-                flow_id: NEW_CUSTOMER_FLOW_ID,
-                flow_cta: "Зарегистрироваться",
-                flow_action: "navigate",
-                flow_action_payload: {
-                    user_address: "ул. Исы Ахунбаева 125в, кв. 10" // Ваш адрес
+        messaging_product: "whatsapp",
+        to: from,
+        type: "interactive",
+        interactive: {
+            type: "flow",
+            header: {
+                type: "text",
+                text: "🍣 Yaposhkin Rolls"
+            },
+            body: {
+                text: "Добро пожаловать!"
+            },
+            footer: {
+                text: "Заполните форму регистрации"
+            },
+            action: {
+                name: "flow",
+                parameters: {
+                    flow_message_version: "3",
+                    flow_token: `new_customer_${Date.now()}`,
+                    flow_id: NEW_CUSTOMER_FLOW_ID,
+                    flow_cta: "Зарегистрироваться",
+                    flow_action: "navigate"
                 }
             }
         }
-    }
-};
+    };
 
     await sendWhatsAppMessage(phone_no_id, flowData);
 }
@@ -324,7 +321,10 @@ async function sendOrderFlow(phone_no_id, from) {
                     flow_token: `order_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
                     flow_cta: "Оформить заказ",
-                    flow_action: "navigate"
+                    flow_action: "navigate",
+                    flow_action_payload: {
+                    user_address: "ул. Исы Ахунбаева 125в, кв. 10" // Ваш адрес
+                }
                 }
             }
         }
