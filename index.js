@@ -767,9 +767,9 @@ function handleEncryptedRequest(req, res) {
     try {
         // Простой ответ для зашифрованных данных
         const response = {
-            version: "5.0",
+            version: "3.0",
             data: {
-                status: "active"
+                status: "ping"
             }
         };
 
