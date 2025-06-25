@@ -711,7 +711,7 @@ app.post("/flow", async (req, res) => {
             case "ping":
                 console.log("🏓 Ping request");
                 return res.status(200).json({
-                    version: version,
+                    version: "5.0",
                     data: {
                         status: "active"
                     }
@@ -720,7 +720,7 @@ app.post("/flow", async (req, res) => {
             case "INIT":
                 console.log("🚀 Flow initialization");
                 return res.status(200).json({
-                    version: version,
+                    version: "5.0",
                     data: {
                         screen: "welcome",
                         flow_token: flow_token || "default_token"
@@ -730,7 +730,7 @@ app.post("/flow", async (req, res) => {
             case "data_exchange":
                 console.log("💾 Data exchange");
                 return res.status(200).json({
-                    version: version,
+                    version: "5.0",
                     data: {
                         success: true
                     }
@@ -740,7 +740,7 @@ app.post("/flow", async (req, res) => {
                 console.log("❓ Unknown or no action, sending default response");
                 // Если нет action, возвращаем простой ответ для проверки работоспособности
                 return res.status(200).json({
-                    version: version,
+                    version: "5.0",
                     data: {
                         status: "active",
                         message: "Flow endpoint is working"
@@ -751,7 +751,7 @@ app.post("/flow", async (req, res) => {
     } catch (error) {
         console.error("❌ Flow endpoint error:", error);
         return res.status(200).json({
-            version: version,
+            version: "5.0",
             data: {
                 status: "error",
                 message: error.message
@@ -767,7 +767,7 @@ function handleEncryptedRequest(req, res) {
     try {
         // Простой ответ для зашифрованных данных
         const response = {
-            version: version,
+            version: "5.0",
             data: {
                 status: "active"
             }
@@ -779,7 +779,7 @@ function handleEncryptedRequest(req, res) {
     } catch (error) {
         console.error("❌ Encrypted request error:", error);
         return res.status(200).json({
-            version: version,
+            version: "5.0",
             data: {
                 status: "error"
             }
