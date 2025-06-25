@@ -2,7 +2,6 @@ const express = require("express");
 const body_parser = require("body-parser");
 const axios = require("axios");
 require('dotenv').config();
-const crypto = require('crypto');
 
 const app = express().use(body_parser.json());
 
@@ -681,6 +680,9 @@ function getPaymentMethodName(method) {
 
 
 
+// Добавьте эти модули в начало файла
+const crypto = require('crypto');
+
 // Добавьте этот endpoint для обработки зашифрованных Flow данных
 app.post("/flow", async (req, res) => {
     console.log("=== ENCRYPTED FLOW REQUEST ===");
@@ -886,7 +888,6 @@ app.get("/flow", (req, res) => {
         message: "Ready to handle WhatsApp Flow requests"
     });
 });
-
 app.get("/", (req, res) => {
     res.status(200).send("hello this is webhook setup");
 });
