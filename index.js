@@ -679,127 +679,256 @@ function getPaymentMethodName(method) {
 
 
 
-// Полностью замените ваш /flow endpoint на этот:
+const crypto = require('crypto');
+const fs = require('fs');
 
+// Flow endpoint с полным шифрованием
 app.post("/flow", async (req, res) => {
     console.log("=== FLOW REQUEST ===");
     console.log("Headers:", JSON.stringify(req.headers, null, 2));
     console.log("Body:", JSON.stringify(req.body, null, 2));
 
     try {
-        // Проверяем тип запроса
-        if (req.body.encrypted_flow_data) {
-            console.log("🔐 Encrypted flow data detected");
-            return handleEncryptedRequest(req, res);
+        const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
+
+        // Проверяем наличие зашифрованных данных
+        if (!encrypted_flow_data || !encrypted_aes_key || !initial_vector) {
+            console.log("❌ Missing encryption parameters");
+            return res.status(421).json({ error: "Missing encryption parameters" });
         }
 
-        // Обычные Flow запросы
-        const { version, action, flow_token, data } = req.body;
+        // Расшифровываем данные
+        const decryptedData = await decryptFlowData(encrypted_flow_data, encrypted_aes_key, initial_vector);
         
-        console.log(`📋 Processing: version=${version}, action=${action}`);
-
-        // Проверка версии
-        if (version && version !== "5.0") {
-            console.log("❌ Unsupported version:", version);
-            return res.status(400).json({
-                error: "Unsupported version"
-            });
+        if (!decryptedData) {
+            console.log("❌ Failed to decrypt flow data");
+            return res.status(421).json({ error: "Decryption failed" });
         }
 
-        // Обработка действий
+        console.log("✅ Decrypted data:", JSON.stringify(decryptedData, null, 2));
+
+        // Обрабатываем расшифрованные данные
+        const responseData = await processFlowData(decryptedData);
+
+        // Шифруем ответ
+        const encryptedResponse = await encryptFlowResponse(responseData, encrypted_aes_key, initial_vector);
+
+        if (!encryptedResponse) {
+            console.log("❌ Failed to encrypt response");
+            return res.status(500).json({ error: "Encryption failed" });
+        }
+
+        console.log("✅ Sending encrypted response");
+        res.setHeader('Content-Type', 'text/plain');
+        return res.status(200).send(encryptedResponse);
+
+    } catch (error) {
+        console.error("❌ Flow endpoint error:", error);
+        return res.status(421).json({ error: "Request processing failed" });
+    }
+});
+
+// Функция расшифровки Flow данных
+async function decryptFlowData(encryptedData, encryptedKey, iv) {
+    try {
+        console.log("🔓 Starting decryption process...");
+        
+        // Декодируем из base64
+        const encryptedBuffer = Buffer.from(encryptedData, 'base64');
+        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
+        const ivBuffer = Buffer.from(iv, 'base64');
+        
+        console.log("📏 Buffer lengths:", {
+            data: encryptedBuffer.length,
+            key: encryptedKeyBuffer.length,
+            iv: ivBuffer.length
+        });
+
+        // Получаем приватный ключ (нужно добавить в переменные окружения)
+        const privateKey = getPrivateKey();
+        if (!privateKey) {
+            throw new Error("Private key not found");
+        }
+
+        // Расшифровываем AES ключ
+        const aesKey = crypto.privateDecrypt(
+            {
+                key: privateKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            encryptedKeyBuffer
+        );
+
+        console.log("🔑 AES key decrypted, length:", aesKey.length);
+
+        // Создаем дешифровщик AES-GCM
+        const decipher = crypto.createDecipherGCM('aes-128-gcm', aesKey.slice(0, 16));
+        decipher.setIV(ivBuffer);
+        
+        // Извлекаем тег аутентификации (последние 16 байт)
+        const tag = encryptedBuffer.slice(-16);
+        const ciphertext = encryptedBuffer.slice(0, -16);
+        
+        decipher.setAuthTag(tag);
+
+        // Расшифровываем данные
+        let decrypted = decipher.update(ciphertext, null, 'utf8');
+        decrypted += decipher.final('utf8');
+
+        console.log("✅ Decryption successful");
+        return JSON.parse(decrypted);
+
+    } catch (error) {
+        console.error("❌ Decryption error:", error);
+        return null;
+    }
+}
+
+// Функция шифрования ответа
+async function encryptFlowResponse(responseData, encryptedKey, iv) {
+    try {
+        console.log("🔒 Starting encryption process...");
+        
+        // Декодируем ключ и IV
+        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
+        const ivBuffer = Buffer.from(iv, 'base64');
+        
+        // Получаем приватный ключ и расшифровываем AES ключ
+        const privateKey = getPrivateKey();
+        const aesKey = crypto.privateDecrypt(
+            {
+                key: privateKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            encryptedKeyBuffer
+        );
+
+        // Конвертируем ответ в JSON строку
+        const responseString = JSON.stringify(responseData);
+        console.log("📤 Response to encrypt:", responseString);
+
+        // Создаем шифровщик AES-GCM
+        const cipher = crypto.createCipherGCM('aes-128-gcm', aesKey.slice(0, 16));
+        cipher.setIV(ivBuffer);
+
+        // Шифруем данные
+        let encrypted = cipher.update(responseString, 'utf8');
+        encrypted = Buffer.concat([encrypted, cipher.final()]);
+        
+        // Получаем тег аутентификации
+        const tag = cipher.getAuthTag();
+        
+        // Объединяем зашифрованные данные и тег
+        const encryptedWithTag = Buffer.concat([encrypted, tag]);
+        
+        // Кодируем в base64
+        const encryptedBase64 = encryptedWithTag.toString('base64');
+        
+        console.log("✅ Encryption successful");
+        return encryptedBase64;
+
+    } catch (error) {
+        console.error("❌ Encryption error:", error);
+        return null;
+    }
+}
+
+// Обработка Flow данных
+async function processFlowData(data) {
+    console.log("🔄 Processing flow data:", data);
+    
+    try {
+        const { version, action, flow_token, data: flowData } = data;
+        
+        console.log(`Processing: version=${version}, action=${action}, token=${flow_token}`);
+
         switch (action) {
             case "ping":
-                console.log("🏓 Ping request");
-                return res.status(200).json({
-                    version: "3.0",
+                return {
+                    version: "5.0",
                     data: {
-                        status: "ping"
+                        status: "active"
                     }
-                });
+                };
 
             case "INIT":
-                console.log("🚀 Flow initialization");
-                return res.status(200).json({
+                return {
                     version: "5.0",
                     data: {
                         screen: "welcome",
                         flow_token: flow_token || "default_token"
                     }
-                });
+                };
 
             case "data_exchange":
-                console.log("💾 Data exchange");
-                return res.status(200).json({
+                return {
                     version: "5.0",
                     data: {
-                        success: true
+                        success: true,
+                        message: "Data received successfully"
                     }
-                });
+                };
 
             default:
-                console.log("❓ Unknown or no action, sending default response");
-                // Если нет action, возвращаем простой ответ для проверки работоспособности
-                return res.status(200).json({
+                return {
                     version: "5.0",
                     data: {
                         status: "active",
-                        message: "Flow endpoint is working"
+                        message: "Flow endpoint working"
                     }
-                });
+                };
         }
-
     } catch (error) {
-        console.error("❌ Flow endpoint error:", error);
-        return res.status(200).json({
+        console.error("❌ Flow processing error:", error);
+        return {
             version: "5.0",
             data: {
-                status: "error",
-                message: error.message
-            }
-        });
-    }
-});
-
-// Обработка зашифрованных запросов
-function handleEncryptedRequest(req, res) {
-    console.log("🔐 Handling encrypted request");
-    
-    try {
-        // Простой ответ для зашифрованных данных
-        const response = {
-            version: "3.0",
-            data: {
-                status: "active"
+                error: "Processing failed"
             }
         };
-
-        console.log("📤 Sending JSON response:", response);
-        return res.status(200).json(response);
-
-    } catch (error) {
-        console.error("❌ Encrypted request error:", error);
-        return res.status(200).json({
-            version: "5.0",
-            data: {
-                status: "error"
-            }
-        });
     }
 }
 
-// GET endpoint для тестирования
+// Получение приватного ключа
+function getPrivateKey() {
+    try {
+        // Сначала пробуем из переменной окружения
+        if (process.env.PRIVATE_KEY) {
+            console.log("🔑 Using private key from environment");
+            return process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
+        }
+        
+        // Потом пробуем из файла
+        if (fs.existsSync('./private_key.pem')) {
+            console.log("🔑 Using private key from file");
+            return fs.readFileSync('./private_key.pem', 'utf8');
+        }
+        
+        console.log("❌ Private key not found");
+        return null;
+        
+    } catch (error) {
+        console.error("❌ Error loading private key:", error);
+        return null;
+    }
+}
+
+// GET endpoint для проверки
 app.get("/flow", (req, res) => {
+    const hasPrivateKey = !!getPrivateKey();
+    
     const status = {
-        status: "Flow endpoint is active",
+        status: "Flow endpoint active",
         timestamp: new Date().toISOString(),
-        endpoints: {
-            "POST /flow": "Handle WhatsApp Flow requests",
-            "GET /flow": "Status check"
-        },
-        ready: true
+        encryption: {
+            privateKeyLoaded: hasPrivateKey,
+            algorithm: "AES-128-GCM + RSA-OAEP"
+        }
     };
     
-    console.log("📊 Status check:", status);
+    console.log("📊 Flow status:", status);
     res.status(200).json(status);
 });
 
