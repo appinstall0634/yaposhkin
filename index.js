@@ -303,36 +303,33 @@ async function sendOrderFlow(phone_no_id, from) {
     console.log("=== ОТПРАВКА ORDER FLOW ===");
     
     const flowData = {
-        messaging_product: "whatsapp",
-        to: from,
-        type: "interactive",
-        interactive: {
-            type: "flow",
-            header: {
-                type: "text",
-                text: "🛒 Оформление заказа"
-            },
-            body: {
-                text: "Настройте детали вашего заказа"
-            },
-            footer: {
-                text: "Выберите тип доставки и время"
-            },
-            action: {
-                name: "flow",
-                parameters: {
-                    flow_message_version: "3",
-                    flow_token: `order_${Date.now()}`,
-                    flow_id: ORDER_FLOW_ID,
-                    flow_cta: "Оформить заказ",
-                    flow_action: "navigate",
-                    flow_action_payload: {
-                    user_address: "ул. Исы Ахунбаева 125в, кв. 10" // Ваш адрес
-                }
-                }
+    messaging_product: "whatsapp",
+    to: from,
+    type: "interactive",
+    interactive: {
+        type: "flow",
+        header: {
+            type: "text",
+            text: "🛒 Оформление заказа"
+        },
+        body: {
+            text: "Настройте детали вашего заказа"
+        },
+        footer: {
+            text: "Выберите тип доставки и время"
+        },
+        action: {
+            name: "flow",
+            parameters: {
+                flow_message_version: "3",
+                flow_token: `order_${from}_${Date.now()}`,
+                flow_id: ORDER_FLOW_ID,
+                flow_cta: "Оформить заказ"
+                // Убираем flow_action - тогда Flow запустится с INIT
             }
         }
-    };
+    }
+};
 
     await sendWhatsAppMessage(phone_no_id, flowData);
 }
