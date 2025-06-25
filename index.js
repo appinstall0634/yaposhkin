@@ -2,6 +2,8 @@ const express = require("express");
 const body_parser = require("body-parser");
 const axios = require("axios");
 require('dotenv').config();
+const crypto = require('crypto');
+const fs = require('fs');
 
 const app = express().use(body_parser.json());
 
@@ -679,8 +681,7 @@ function getPaymentMethodName(method) {
 
 
 
-const crypto = require('crypto');
-const fs = require('fs');
+
 
 // Flow endpoint с полным шифрованием
 app.post("/flow", async (req, res) => {
