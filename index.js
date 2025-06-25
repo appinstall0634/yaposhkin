@@ -2,7 +2,6 @@ const express = require("express");
 const body_parser = require("body-parser");
 const axios = require("axios");
 require('dotenv').config();
-const crypto = require('crypto');
 
 const app = express().use(body_parser.json());
 
@@ -680,275 +679,130 @@ function getPaymentMethodName(method) {
 
 
 
+// Полностью замените ваш /flow endpoint на этот:
 
-// Добавьте этот endpoint для обработки зашифрованных Flow данных
 app.post("/flow", async (req, res) => {
-    console.log("=== ENCRYPTED FLOW REQUEST ===");
-    console.log("Headers:", req.headers);
-    console.log("Raw body:", JSON.stringify(req.body, null, 2));
+    console.log("=== FLOW REQUEST ===");
+    console.log("Headers:", JSON.stringify(req.headers, null, 2));
+    console.log("Body:", JSON.stringify(req.body, null, 2));
 
     try {
-        // Проверяем есть ли зашифрованные данные
+        // Проверяем тип запроса
         if (req.body.encrypted_flow_data) {
-            console.log("🔐 Processing encrypted flow data");
-            return handleEncryptedFlowData(req, res);
+            console.log("🔐 Encrypted flow data detected");
+            return handleEncryptedRequest(req, res);
         }
 
-        // Обычная обработка незашифрованных данных
+        // Обычные Flow запросы
         const { version, action, flow_token, data } = req.body;
-        console.log("📄 Processing unencrypted flow data");
         
-        if (version !== "5.0") {
-            return res.status(400).json({ error: "Unsupported version" });
+        console.log(`📋 Processing: version=${version}, action=${action}`);
+
+        // Проверка версии
+        if (version && version !== "5.0") {
+            console.log("❌ Unsupported version:", version);
+            return res.status(400).json({
+                error: "Unsupported version"
+            });
         }
 
+        // Обработка действий
         switch (action) {
             case "ping":
+                console.log("🏓 Ping request");
                 return res.status(200).json({
-                    version: "5.0",
-                    data: { status: "active" }
+                    version: version,
+                    data: {
+                        status: "active"
+                    }
                 });
 
             case "INIT":
-                return handleFlowInit(req, res, flow_token, data);
+                console.log("🚀 Flow initialization");
+                return res.status(200).json({
+                    version: version,
+                    data: {
+                        screen: "welcome",
+                        flow_token: flow_token || "default_token"
+                    }
+                });
 
             case "data_exchange":
-                return handleDataExchange(req, res, flow_token, data);
+                console.log("💾 Data exchange");
+                return res.status(200).json({
+                    version: version,
+                    data: {
+                        success: true
+                    }
+                });
 
             default:
-                return res.status(400).json({ error: "Unknown action" });
+                console.log("❓ Unknown or no action, sending default response");
+                // Если нет action, возвращаем простой ответ для проверки работоспособности
+                return res.status(200).json({
+                    version: version,
+                    data: {
+                        status: "active",
+                        message: "Flow endpoint is working"
+                    }
+                });
         }
 
     } catch (error) {
         console.error("❌ Flow endpoint error:", error);
-        return res.status(500).json({ error: "Internal server error" });
+        return res.status(200).json({
+            version: version,
+            data: {
+                status: "error",
+                message: error.message
+            }
+        });
     }
 });
 
-// Обработка зашифрованных Flow данных
-// Замените функцию handleEncryptedFlowData на эту версию:
-
-async function handleEncryptedFlowData(req, res) {
+// Обработка зашифрованных запросов
+function handleEncryptedRequest(req, res) {
+    console.log("🔐 Handling encrypted request");
+    
     try {
-        const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
-        
-        console.log("🔐 Encrypted data received:");
-        console.log("- Flow data length:", encrypted_flow_data?.length);
-        console.log("- AES key length:", encrypted_aes_key?.length);
-        console.log("- IV length:", initial_vector?.length);
-
-        // Создаем простой ответ для проверки работоспособности
-        const responseData = {
-            version: "5.0",
+        // Простой ответ для зашифрованных данных
+        const response = {
+            version: version,
             data: {
                 status: "active"
             }
         };
 
-        // Конвертируем ответ в Base64 (как ожидает WhatsApp)
-        const responseString = JSON.stringify(responseData);
-        const responseBase64 = Buffer.from(responseString).toString('base64');
-
-        console.log("📤 Sending Base64 response:", responseBase64);
-
-        // Отправляем ответ в текстовом формате Base64
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(200).send(responseBase64);
+        console.log("📤 Sending JSON response:", response);
+        return res.status(200).json(response);
 
     } catch (error) {
-        console.error("❌ Error handling encrypted flow data:", error);
-        
-        // В случае ошибки тоже отправляем в Base64
-        const errorResponse = JSON.stringify({
-            error: "Failed to process encrypted data"
-        });
-        const errorBase64 = Buffer.from(errorResponse).toString('base64');
-        
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(500).send(errorBase64);
-    }
-}
-
-// Также обновите обычные Flow ответы для совместимости:
-async function handleFlowInit(req, res, flow_token, data) {
-    console.log("🚀 Flow initialization");
-    
-    const response = {
-        version: "5.0",
-        data: {
-            screen: "welcome",
-            message: "Welcome to Yaposhkin Rolls!",
-            flow_token: flow_token
-        }
-    };
-    
-    return res.status(200).json(response);
-}
-
-async function handleDataExchange(req, res, flow_token, data) {
-    console.log("💾 Data exchange request");
-    
-    const response = {
-        version: "5.0",
-        data: {
-            success: true,
-            flow_token: flow_token
-        }
-    };
-    
-    return res.status(200).json(response);
-}
-
-// Альтернативная версия для всех ответов в Base64:
-async function handleEncryptedFlowDataV2(req, res) {
-    try {
-        console.log("🔐 Processing encrypted flow data");
-        
-        // Минимальный ответ для прохождения проверки
-        const response = "OK";
-        const responseBase64 = Buffer.from(response).toString('base64');
-
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(200).send(responseBase64);
-
-    } catch (error) {
-        console.error("❌ Flow processing error:", error);
-        
-        const errorBase64 = Buffer.from("ERROR").toString('base64');
-        res.setHeader('Content-Type', 'text/plain');
-        return res.status(500).send(errorBase64);
-    }
-}
-
-// Простая функция для расшифровки (базовая версия)
-function decryptFlowData(encryptedData, encryptedKey, iv, privateKey) {
-    try {
-        console.log("🔓 Attempting to decrypt flow data...");
-        
-        // Декодируем из base64
-        const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
-        const ivBuffer = Buffer.from(iv, 'base64');
-        
-        // Расшифровываем AES ключ с помощью приватного ключа
-        const aesKey = crypto.privateDecrypt(
-            {
-                key: privateKey,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha256'
-            },
-            encryptedKeyBuffer
-        );
-        
-        // Расшифровываем данные с помощью AES ключа
-        const decipher = crypto.createDecipherGCM('aes-128-gcm', aesKey.slice(0, 16));
-        decipher.setIV(ivBuffer);
-        
-        let decrypted = decipher.update(encryptedBuffer, null, 'utf8');
-        decrypted += decipher.final('utf8');
-        
-        console.log("✅ Successfully decrypted flow data");
-        return JSON.parse(decrypted);
-        
-    } catch (error) {
-        console.error("❌ Decryption failed:", error);
-        throw error;
-    }
-}
-
-// Обновленный webhook endpoint с поддержкой Flow
-app.post("/webhook", async (req, res) => {
-    let body_param = req.body;
-
-    console.log("=== WEBHOOK MESSAGE ===");
-    console.log(JSON.stringify(body_param, null, 2));
-
-    if (body_param.object) {
-        console.log("Processing webhook message");
-        
-        if (body_param.entry && 
-            body_param.entry[0].changes && 
-            body_param.entry[0].changes[0].value.messages && 
-            body_param.entry[0].changes[0].value.messages[0]) {
-            
-            let phone_no_id = body_param.entry[0].changes[0].value.metadata.phone_number_id;
-            let from = body_param.entry[0].changes[0].value.messages[0].from;
-            let message = body_param.entry[0].changes[0].value.messages[0];
-
-            console.log("phone number " + phone_no_id);
-            console.log("from " + from);
-            console.log("message type:", message.type);
-
-            try {
-                if (message.type === "interactive") {
-                    console.log("Interactive message type:", message.interactive.type);
-                    
-                    if (message.interactive.type === "nfm_reply") {
-                        // Ответ от Flow
-                        console.log("🔄 Processing Flow response");
-                        await handleFlowResponse(phone_no_id, from, message, body_param);
-                    } else if (message.interactive.type === "product_list_reply") {
-                        console.log("🛒 Processing catalog response (product_list)");
-                        await handleCatalogResponse(phone_no_id, from, message);
-                    } else if (message.interactive.type === "button_reply") {
-                        console.log("🔘 Processing button response");
-                        await handleButtonResponse(phone_no_id, from, message);
-                    } else {
-                        console.log("❓ Unknown interactive message type:", message.interactive.type);
-                        await handleIncomingMessage(phone_no_id, from, message);
-                    }
-                } else if (message.type === "order") {
-                    console.log("🛒 Processing catalog response (order)");
-                    await handleCatalogOrderResponse(phone_no_id, from, message);
-                } else {
-                    console.log("📝 Processing regular message");
-                    await handleIncomingMessage(phone_no_id, from, message);
-                }
-            } catch (error) {
-                console.error("Error processing message:", error);
+        console.error("❌ Encrypted request error:", error);
+        return res.status(200).json({
+            version: version,
+            data: {
+                status: "error"
             }
-
-            res.sendStatus(200);
-        } else {
-            res.sendStatus(404);
-        }
-    } else {
-        // Возможно это Flow данные пришли на webhook endpoint
-        console.log("❓ Non-standard webhook data received");
-        res.sendStatus(200);
+        });
     }
-});
-
-// Простые функции-заглушки для Flow обработки
-async function handleFlowInit(req, res, flow_token, data) {
-    console.log("🚀 Flow initialization");
-    return res.status(200).json({
-        version: "5.0",
-        data: {
-            screen: "welcome",
-            message: "Welcome to Yaposhkin Rolls!"
-        }
-    });
 }
 
-async function handleDataExchange(req, res, flow_token, data) {
-    console.log("💾 Data exchange request");
-    return res.status(200).json({
-        version: "5.0",
-        data: {
-            success: true
-        }
-    });
-}
-
-// GET endpoint для проверки
+// GET endpoint для тестирования
 app.get("/flow", (req, res) => {
-    res.status(200).json({
+    const status = {
         status: "Flow endpoint is active",
         timestamp: new Date().toISOString(),
-        message: "Ready to handle WhatsApp Flow requests"
-    });
+        endpoints: {
+            "POST /flow": "Handle WhatsApp Flow requests",
+            "GET /flow": "Status check"
+        },
+        ready: true
+    };
+    
+    console.log("📊 Status check:", status);
+    res.status(200).json(status);
 });
+
 
 app.get("/", (req, res) => {
     res.status(200).send("hello this is webhook setup");
