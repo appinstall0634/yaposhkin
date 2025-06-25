@@ -4,6 +4,7 @@ const axios = require("axios");
 require('dotenv').config();
 const crypto = require('crypto');
 const fs = require('fs');
+const PORT = process.env.PORT || 3000;
 
 const app = express().use(body_parser.json());
 
@@ -17,8 +18,9 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '4265839023734503'; // newCustomer
 const ORDER_FLOW_ID = '708820881926236'; // order
 
-app.listen(process.env.PORT, () => {
+app.listen(PORT, () => {
     console.log("webhook is listening");
+    console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
 });
 
 // Верификация webhook
@@ -680,7 +682,6 @@ function getPaymentMethodName(method) {
 }
 
 
-// Flow endpoint с исправленным шифрованием
 app.post("/flow", async (req, res) => {
     console.log("=== FLOW REQUEST ===");
     console.log("Headers:", JSON.stringify(req.headers, null, 2));
@@ -695,26 +696,16 @@ app.post("/flow", async (req, res) => {
             return res.status(421).json({ error: "Missing encryption parameters" });
         }
 
-        // Расшифровываем данные
-        const decryptedData = await decryptFlowData(encrypted_flow_data, encrypted_aes_key, initial_vector);
+        // Расшифровываем данные используя официальный метод
+        const { decryptedBody, aesKeyBuffer, initialVectorBuffer } = decryptRequest(req.body);
         
-        if (!decryptedData) {
-            console.log("❌ Failed to decrypt flow data");
-            return res.status(421).json({ error: "Decryption failed" });
-        }
-
-        console.log("✅ Decrypted data:", JSON.stringify(decryptedData, null, 2));
+        console.log("✅ Decrypted data:", JSON.stringify(decryptedBody, null, 2));
 
         // Обрабатываем расшифрованные данные
-        const responseData = await processFlowData(decryptedData);
+        const responseData = await processFlowData(decryptedBody);
 
-        // Шифруем ответ
-        const encryptedResponse = await encryptFlowResponse(responseData, encrypted_aes_key, initial_vector);
-
-        if (!encryptedResponse) {
-            console.log("❌ Failed to encrypt response");
-            return res.status(500).json({ error: "Encryption failed" });
-        }
+        // Шифруем ответ используя официальный метод
+        const encryptedResponse = encryptResponse(responseData, aesKeyBuffer, initialVectorBuffer);
 
         console.log("✅ Sending encrypted response");
         res.setHeader('Content-Type', 'text/plain');
@@ -726,197 +717,265 @@ app.post("/flow", async (req, res) => {
     }
 });
 
-// Исправленная функция расшифровки для старого Node.js
-async function decryptFlowData(encryptedData, encryptedKey, iv) {
-    try {
-        console.log("🔓 Starting decryption process...");
-        
-        // Декодируем из base64
-        const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
-        const ivBuffer = Buffer.from(iv, 'base64');
-        
-        console.log("📏 Buffer lengths:", {
-            data: encryptedBuffer.length,
-            key: encryptedKeyBuffer.length,
-            iv: ivBuffer.length
-        });
-
-        // Получаем приватный ключ
-        const privateKey = getPrivateKey();
-        if (!privateKey) {
-            throw new Error("Private key not found");
-        }
-
-        // Расшифровываем AES ключ
-        const aesKey = crypto.privateDecrypt(
-            {
-                key: privateKey,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha256'
-            },
-            encryptedKeyBuffer
-        );
-
-        console.log("🔑 AES key decrypted, length:", aesKey.length);
-
-        // Используем AES-128-CBC вместо GCM для совместимости
-        const decipher = crypto.createDecipher('aes-128-cbc', aesKey.slice(0, 16));
-        decipher.setAutoPadding(true);
-        
-        // Расшифровываем данные
-        let decrypted = decipher.update(encryptedBuffer, null, 'utf8');
-        decrypted += decipher.final('utf8');
-
-        console.log("✅ Decryption successful");
-        return JSON.parse(decrypted);
-
-    } catch (error) {
-        console.error("❌ Decryption error:", error);
-        
-        // Fallback: попробуем другие методы
-        try {
-            console.log("🔄 Trying alternative decryption...");
-            return await decryptFlowDataAlternative(encryptedData, encryptedKey, iv);
-        } catch (altError) {
-            console.error("❌ Alternative decryption also failed:", altError);
-            return null;
-        }
+// Официальная функция расшифровки от Facebook
+const decryptRequest = (body) => {
+    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = body;
+    
+    // Получаем приватный ключ
+    const privatePem = getPrivateKey();
+    if (!privatePem) {
+        throw new Error("Private key not found");
     }
-}
 
-// Альтернативный метод расшифровки
-async function decryptFlowDataAlternative(encryptedData, encryptedKey, iv) {
-    try {
-        const encryptedBuffer = Buffer.from(encryptedData, 'base64');
-        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
-        const ivBuffer = Buffer.from(iv, 'base64');
-        
-        const privateKey = getPrivateKey();
-        const aesKey = crypto.privateDecrypt(
-            {
-                key: privateKey,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha256'
-            },
-            encryptedKeyBuffer
-        );
+    // Расшифровываем AES ключ используя RSA
+    const decryptedAesKey = crypto.privateDecrypt(
+        {
+            key: crypto.createPrivateKey(privatePem),
+            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+            oaepHash: "sha256",
+        },
+        Buffer.from(encrypted_aes_key, "base64")
+    );
 
-        // Пробуем AES-128-CTR
-        const decipher = crypto.createDecipher('aes-128-ctr', aesKey.slice(0, 16));
-        let decrypted = decipher.update(encryptedBuffer, null, 'utf8');
-        decrypted += decipher.final('utf8');
+    // Расшифровываем Flow данные используя AES-GCM
+    const flowDataBuffer = Buffer.from(encrypted_flow_data, "base64");
+    const initialVectorBuffer = Buffer.from(initial_vector, "base64");
+    
+    const TAG_LENGTH = 16;
+    const encrypted_flow_data_body = flowDataBuffer.subarray(0, -TAG_LENGTH);
+    const encrypted_flow_data_tag = flowDataBuffer.subarray(-TAG_LENGTH);
 
-        return JSON.parse(decrypted);
-        
-    } catch (error) {
-        throw error;
+    const decipher = crypto.createDecipheriv(
+        "aes-128-gcm",
+        decryptedAesKey,
+        initialVectorBuffer
+    );
+    
+    decipher.setAuthTag(encrypted_flow_data_tag);
+
+    const decryptedJSONString = Buffer.concat([
+        decipher.update(encrypted_flow_data_body),
+        decipher.final(),
+    ]).toString("utf-8");
+
+    return {
+        decryptedBody: JSON.parse(decryptedJSONString),
+        aesKeyBuffer: decryptedAesKey,
+        initialVectorBuffer,
+    };
+};
+
+// Официальная функция шифрования от Facebook
+const encryptResponse = (response, aesKeyBuffer, initialVectorBuffer) => {
+    // Инвертируем initialization vector (официальная спецификация)
+    const flipped_iv = [];
+    for (const pair of initialVectorBuffer.entries()) {
+        flipped_iv.push(~pair[1]);
     }
-}
 
-// Исправленная функция шифрования
-async function encryptFlowResponse(responseData, encryptedKey, iv) {
-    try {
-        console.log("🔒 Starting encryption process...");
-        
-        // Декодируем ключ
-        const encryptedKeyBuffer = Buffer.from(encryptedKey, 'base64');
-        
-        // Получаем приватный ключ и расшифровываем AES ключ
-        const privateKey = getPrivateKey();
-        const aesKey = crypto.privateDecrypt(
-            {
-                key: privateKey,
-                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-                oaepHash: 'sha256'
-            },
-            encryptedKeyBuffer
-        );
+    // Шифруем ответ используя AES-GCM
+    const cipher = crypto.createCipheriv(
+        "aes-128-gcm",
+        aesKeyBuffer,
+        Buffer.from(flipped_iv)
+    );
 
-        // Конвертируем ответ в JSON строку
-        const responseString = JSON.stringify(responseData);
-        console.log("📤 Response to encrypt:", responseString);
+    const encryptedData = Buffer.concat([
+        cipher.update(JSON.stringify(response), "utf-8"),
+        cipher.final(),
+        cipher.getAuthTag(),
+    ]);
 
-        // Используем AES-128-CBC для совместимости
-        const cipher = crypto.createCipher('aes-128-cbc', aesKey.slice(0, 16));
-        
-        // Шифруем данные
-        let encrypted = cipher.update(responseString, 'utf8', 'base64');
-        encrypted += cipher.final('base64');
-        
-        console.log("✅ Encryption successful");
-        return encrypted;
+    return encryptedData.toString("base64");
+};
 
-    } catch (error) {
-        console.error("❌ Encryption error:", error);
-        return null;
-    }
-}
-
-// Упрощенная обработка Flow данных
+// Обработка Flow данных
 async function processFlowData(data) {
     console.log("🔄 Processing flow data:", data);
     
     try {
-        // Если данные не расшифровались полностью, возвращаем базовый ответ
-        if (!data || typeof data !== 'object') {
-            console.log("📝 Using default response for health check");
-            return {
-                version: "5.0",
-                data: {
-                    status: "active"
-                }
-            };
-        }
-
-        const { version, action, flow_token, data: flowData } = data;
+        const { version, action, flow_token, data: flowData, screen } = data;
         
-        console.log(`Processing: version=${version}, action=${action}, token=${flow_token}`);
+        console.log(`Processing: version=${version}, action=${action}, screen=${screen}, token=${flow_token}`);
 
         switch (action) {
             case "ping":
+                console.log("🏓 Health check request");
                 return {
-                    version: "5.0",
                     data: {
                         status: "active"
                     }
                 };
 
             case "INIT":
+                console.log("🚀 Flow initialization");
+                if (flow_token && flow_token.includes("new_customer")) {
+                    return {
+                        screen: "registration",
+                        data: {
+                            flow_type: "new_customer",
+                            welcome_message: "Добро пожаловать в Yaposhkin Rolls!"
+                        }
+                    };
+                } else if (flow_token && flow_token.includes("order")) {
+                    return {
+                        screen: "order_details", 
+                        data: {
+                            flow_type: "order",
+                            branches: await getBranchesForFlow()
+                        }
+                    };
+                }
+                
                 return {
-                    version: "5.0",
+                    screen: "welcome",
                     data: {
-                        screen: "welcome",
-                        flow_token: flow_token || "default_token"
+                        message: "Добро пожаловать!"
                     }
                 };
 
             case "data_exchange":
-                return {
-                    version: "5.0",
-                    data: {
-                        success: true,
-                        message: "Data received successfully"
-                    }
-                };
+                console.log("💾 Data exchange from screen:", screen);
+                return await handleDataExchange(screen, flowData, flow_token);
 
             default:
+                console.log("❓ Unknown action, returning default response");
                 return {
-                    version: "5.0",
                     data: {
-                        status: "active",
-                        message: "Flow endpoint working"
+                        status: "active"
                     }
                 };
         }
     } catch (error) {
         console.error("❌ Flow processing error:", error);
         return {
-            version: "5.0",
             data: {
                 status: "active"
             }
         };
+    }
+}
+
+// Обработка обмена данными между экранами
+async function handleDataExchange(screen, data, flow_token) {
+    console.log(`📋 Data exchange for screen: ${screen}`, data);
+    
+    try {
+        switch (screen) {
+            case "registration":
+                // Валидация регистрационных данных
+                const errors = [];
+                
+                if (!data.first_name || data.first_name.trim().length < 2) {
+                    errors.push("Имя должно содержать минимум 2 символа");
+                }
+                
+                if (!data.address || data.address.trim().length < 10) {
+                    errors.push("Пожалуйста, укажите полный адрес");
+                }
+                
+                if (errors.length > 0) {
+                    return {
+                        screen: "registration",
+                        data: {
+                            error_message: errors.join(", ")
+                        }
+                    };
+                }
+                
+                // Успешная регистрация
+                return {
+                    screen: "SUCCESS",
+                    data: {
+                        extension_message_response: {
+                            params: {
+                                flow_token: flow_token,
+                                customer_name: data.first_name,
+                                customer_address: data.address,
+                                registration_complete: true
+                            }
+                        }
+                    }
+                };
+
+            case "order_details":
+                // Валидация заказа
+                const orderErrors = [];
+                
+                if (!data.order_type || !["delivery", "pickup"].includes(data.order_type)) {
+                    orderErrors.push("Выберите тип получения заказа");
+                }
+                
+                if (data.order_type === "pickup" && !data.branch) {
+                    orderErrors.push("Выберите филиал для самовывоза");
+                }
+                
+                if (orderErrors.length > 0) {
+                    return {
+                        screen: "order_details",
+                        data: {
+                            error_message: orderErrors.join(", ")
+                        }
+                    };
+                }
+                
+                // Успешное оформление заказа
+                return {
+                    screen: "SUCCESS",
+                    data: {
+                        extension_message_response: {
+                            params: {
+                                flow_token: flow_token,
+                                order_type: data.order_type,
+                                branch_id: data.branch || null,
+                                delivery_address: data.delivery_address || null,
+                                preparation_time: data.preparation_time || "asap",
+                                order_complete: true
+                            }
+                        }
+                    }
+                };
+
+            default:
+                return {
+                    screen: "welcome",
+                    data: {
+                        message: "Добро пожаловать!"
+                    }
+                };
+        }
+    } catch (error) {
+        console.error("❌ Data exchange error:", error);
+        return {
+            screen: screen,
+            data: {
+                error_message: "Произошла ошибка. Попробуйте еще раз."
+            }
+        };
+    }
+}
+
+// Получение филиалов для Flow
+async function getBranchesForFlow() {
+    try {
+        const response = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = response.data;
+        
+        return restaurants.map(restaurant => ({
+            id: restaurant.external_id.toString(),
+            title: restaurant.title,
+            address: restaurant.address
+        }));
+        
+    } catch (error) {
+        console.error("❌ Error fetching branches:", error);
+        return [
+            {
+                id: "1",
+                title: "Филиал на Чуй",
+                address: "пр. Чуй, 123"
+            }
+        ];
     }
 }
 
@@ -954,31 +1013,13 @@ app.get("/flow", (req, res) => {
         nodeVersion: process.version,
         encryption: {
             privateKeyLoaded: hasPrivateKey,
-            supportedAlgorithms: crypto.getCiphers().filter(c => c.includes('aes')),
-            method: "AES-128-CBC + RSA-OAEP (fallback mode)"
+            algorithm: "Official Facebook implementation: AES-128-GCM + RSA-OAEP-SHA256",
+            supportedCiphers: crypto.getCiphers().filter(c => c.includes('gcm')).slice(0, 5)
         }
     };
     
     console.log("📊 Flow status:", status);
     res.status(200).json(status);
-});
-
-// Простой fallback endpoint если шифрование не работает
-app.post("/flow-simple", (req, res) => {
-    console.log("🔧 Simple flow endpoint called");
-    
-    // Возвращаем минимальный ответ для проверки работоспособности
-    const response = {
-        version: "5.0",
-        data: {
-            status: "active"
-        }
-    };
-    
-    const responseBase64 = Buffer.from(JSON.stringify(response)).toString('base64');
-    
-    res.setHeader('Content-Type', 'text/plain');
-    return res.status(200).send(responseBase64);
 });
 
 
