@@ -677,6 +677,283 @@ function getPaymentMethodName(method) {
     return methods[method] || method;
 }
 
+
+
+
+app.post("/flow", async (req, res) => {
+    console.log("=== FLOW REQUEST RECEIVED ===");
+    console.log("Headers:", req.headers);
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+
+    try {
+        const { version, action, flow_token, data } = req.body;
+
+        console.log("Flow version:", version);
+        console.log("Action:", action);
+        console.log("Flow token:", flow_token);
+        console.log("Data:", data);
+
+        // Проверяем версию
+        if (version !== "5.0") {
+            return res.status(400).json({
+                error: "Unsupported version"
+            });
+        }
+
+        // Обрабатываем разные действия
+        switch (action) {
+            case "ping":
+                console.log("📡 Ping request received");
+                return res.status(200).json({
+                    version: "5.0",
+                    data: {
+                        status: "active"
+                    }
+                });
+
+            case "INIT":
+                console.log("🚀 Flow initialization");
+                return handleFlowInit(req, res, flow_token, data);
+
+            case "data_exchange":
+                console.log("💾 Data exchange request");
+                return handleDataExchange(req, res, flow_token, data);
+
+            default:
+                console.log("❓ Unknown action:", action);
+                return res.status(400).json({
+                    error: "Unknown action"
+                });
+        }
+
+    } catch (error) {
+        console.error("❌ Flow endpoint error:", error);
+        return res.status(500).json({
+            error: "Internal server error"
+        });
+    }
+});
+
+// Обработка инициализации Flow
+async function handleFlowInit(req, res, flow_token, data) {
+    try {
+        console.log("=== FLOW INIT ===");
+        console.log("Flow token:", flow_token);
+        
+        // Определяем тип Flow по токену
+        if (flow_token.includes("new_customer")) {
+            console.log("📝 Initializing new customer flow");
+            
+            return res.status(200).json({
+                version: "5.0",
+                data: {
+                    // Начальные данные для регистрационного Flow
+                    screen: "registration",
+                    flow_type: "new_customer",
+                    prefilled_data: {
+                        phone: data?.phone || "",
+                        first_name: "",
+                        last_name: "",
+                        address: ""
+                    }
+                }
+            });
+            
+        } else if (flow_token.includes("order")) {
+            console.log("🛒 Initializing order flow");
+            
+            return res.status(200).json({
+                version: "5.0",
+                data: {
+                    // Начальные данные для Flow заказа
+                    screen: "order_details",
+                    flow_type: "order",
+                    branches: await getBranchesForFlow(),
+                    user_data: {
+                        phone: data?.phone || "",
+                        // Можно добавить адрес пользователя из базы
+                        saved_addresses: []
+                    }
+                }
+            });
+        }
+        
+        // Fallback для неизвестных Flow
+        return res.status(200).json({
+            version: "5.0",
+            data: {
+                screen: "welcome",
+                message: "Welcome to Yaposhkin Rolls!"
+            }
+        });
+        
+    } catch (error) {
+        console.error("❌ Flow init error:", error);
+        return res.status(500).json({
+            error: "Flow initialization failed"
+        });
+    }
+}
+
+// Обработка обмена данными в Flow
+async function handleDataExchange(req, res, flow_token, data) {
+    try {
+        console.log("=== DATA EXCHANGE ===");
+        console.log("Flow token:", flow_token);
+        console.log("Received data:", data);
+
+        // Валидация данных в зависимости от типа Flow
+        if (flow_token.includes("new_customer")) {
+            return handleNewCustomerDataExchange(req, res, data);
+        } else if (flow_token.includes("order")) {
+            return handleOrderDataExchange(req, res, data);
+        }
+
+        // Общий ответ для других случаев
+        return res.status(200).json({
+            version: "5.0",
+            data: {
+                success: true
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Data exchange error:", error);
+        return res.status(500).json({
+            error: "Data exchange failed"
+        });
+    }
+}
+
+// Обработка данных регистрации
+async function handleNewCustomerDataExchange(req, res, data) {
+    console.log("📝 Processing new customer data:", data);
+
+    // Простая валидация
+    const errors = [];
+    
+    if (!data.first_name || data.first_name.trim().length < 2) {
+        errors.push({
+            field: "first_name",
+            message: "Имя должно содержать минимум 2 символа"
+        });
+    }
+    
+    if (!data.address || data.address.trim().length < 10) {
+        errors.push({
+            field: "address", 
+            message: "Пожалуйста, укажите полный адрес"
+        });
+    }
+
+    if (errors.length > 0) {
+        return res.status(200).json({
+            version: "5.0",
+            data: {
+                errors: errors
+            }
+        });
+    }
+
+    // Данные валидны
+    return res.status(200).json({
+        version: "5.0",
+        data: {
+            success: true,
+            next_screen: "confirmation",
+            message: "Регистрация успешна!"
+        }
+    });
+}
+
+// Обработка данных заказа
+async function handleOrderDataExchange(req, res, data) {
+    console.log("🛒 Processing order data:", data);
+
+    // Валидация заказа
+    const errors = [];
+    
+    if (!data.order_type || !["delivery", "pickup"].includes(data.order_type)) {
+        errors.push({
+            field: "order_type",
+            message: "Выберите тип получения заказа"
+        });
+    }
+    
+    if (data.order_type === "pickup" && !data.branch) {
+        errors.push({
+            field: "branch",
+            message: "Выберите филиал для самовывоза"
+        });
+    }
+    
+    if (data.order_type === "delivery" && !data.delivery_address) {
+        errors.push({
+            field: "delivery_address",
+            message: "Укажите адрес доставки"
+        });
+    }
+
+    if (errors.length > 0) {
+        return res.status(200).json({
+            version: "5.0",
+            data: {
+                errors: errors
+            }
+        });
+    }
+
+    // Данные валидны
+    return res.status(200).json({
+        version: "5.0",
+        data: {
+            success: true,
+            order_confirmed: true,
+            message: "Заказ успешно оформлен!"
+        }
+    });
+}
+
+// Получение филиалов для Flow
+async function getBranchesForFlow() {
+    try {
+        const response = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = response.data;
+        
+        return restaurants.map(restaurant => ({
+            id: restaurant.external_id.toString(),
+            title: restaurant.title,
+            address: restaurant.address,
+            phone: restaurant.contacts.find(c => c.type === 'PHONE')?.value || ""
+        }));
+        
+    } catch (error) {
+        console.error("❌ Error fetching branches:", error);
+        return [
+            {
+                id: "1",
+                title: "Филиал на Чуй",
+                address: "пр. Чуй, 123",
+                phone: "+996 XXX XXX XXX"
+            }
+        ];
+    }
+}
+
+// Добавьте GET endpoint для тестирования
+app.get("/flow", (req, res) => {
+    res.status(200).json({
+        status: "Flow endpoint is active",
+        message: "This endpoint handles WhatsApp Flow requests",
+        endpoints: {
+            POST: "/flow - Handle Flow data exchange",
+            GET: "/flow - This status message"
+        }
+    });
+});
+
+
+
 app.get("/", (req, res) => {
     res.status(200).send("hello this is webhook setup");
 });
