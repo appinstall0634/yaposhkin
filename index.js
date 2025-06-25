@@ -327,10 +327,9 @@ async function sendOrderFlow(phone_no_id, from) {
                 flow_cta: "Оформить заказ",
                 flow_action: "data_exchange",
                 flow_action_payload: {
+                    screen: "ORDER_TYPE",
                     data: {
-                        user_address: "ул. Исы Ахунбаева 125в, кв. 10",
-                        user_phone: from,
-                        order_type: "delivery"
+                        user_address: "ул. Исы Ахунбаева 125в, кв. 10"
                     }
                 }
             }
