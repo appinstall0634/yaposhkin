@@ -303,39 +303,34 @@ async function sendOrderFlow(phone_no_id, from) {
     console.log("=== ОТПРАВКА ORDER FLOW ===");
     
     const flowData = {
-    messaging_product: "whatsapp",
-    to: from,
-    type: "interactive",
-    interactive: {
-        type: "flow",
-        header: {
-            type: "text",
-            text: "🛒 Оформление заказа"
-        },
-        body: {
-            text: "Настройте детали вашего заказа"
-        },
-        footer: {
-            text: "Выберите тип доставки и время"
-        },
-        action: {
-            name: "flow",
-            parameters: {
-                flow_message_version: "3",
-                flow_token: `123456`,
-                flow_id: ORDER_FLOW_ID,
-                flow_cta: "Оформить заказ",
-                flow_action: "data_exchange",
-                flow_action_payload: {
-                    screen: "ORDER_TYPE",
-                    data: {
-                        user_address: "ул. Исы Ахунбаева 125в, кв. 10"
-                    }
+        messaging_product: "whatsapp",
+        to: from,
+        type: "interactive",
+        interactive: {
+            type: "flow",
+            header: {
+                type: "text",
+                text: "🛒 Оформление заказа"
+            },
+            body: {
+                text: "Настройте детали вашего заказа"
+            },
+            footer: {
+                text: "Выберите тип доставки и время"
+            },
+            action: {
+                name: "flow",
+                parameters: {
+                    flow_message_version: "3",
+                    flow_token: `order_${from}_${Date.now()}`,
+                    flow_id: ORDER_FLOW_ID,
+                    flow_cta: "Оформить заказ",
+                    flow_action: "navigate"  // ИСПРАВЛЕНО: используем navigate вместо data_exchange
+                    // НЕ ДОБАВЛЯЕМ flow_action_payload!
                 }
             }
         }
-    }
-};
+    };
 
     await sendWhatsAppMessage(phone_no_id, flowData);
 }
@@ -793,7 +788,7 @@ const encryptResponse = (response, aesKeyBuffer, initialVectorBuffer) => {
 };
 
 // Обработка Flow данных
-// ИСПРАВЛЕННАЯ функция processFlowData для правильной структуры данных
+// ДОПОЛНИТЕЛЬНО: Исправляем processFlowData для передачи данных при INIT
 async function processFlowData(data) {
     console.log("🔄 Processing flow data:", data);
     
@@ -801,7 +796,6 @@ async function processFlowData(data) {
         const { version, action, flow_token, data: flowData, screen } = data;
         
         console.log(`Processing: version=${version}, action=${action}, screen=${screen}, token=${flow_token}`);
-        console.log("Raw flowData:", flowData); // Отладка
 
         switch (action) {
             case "ping":
@@ -824,18 +818,13 @@ async function processFlowData(data) {
                         }
                     };
                 } else if (flow_token && flow_token.includes("order")) {
-                    // Получаем данные из flow_action_payload
-                    const userAddress = flowData?.user_address || "ул. Исы Ахунбаева 125в, кв. 10";
-                    const userPhone = flowData?.user_phone || "";
-                    
-                    console.log("📍 User address from payload:", userAddress);
-                    console.log("📞 User phone from payload:", userPhone);
+                    // ИСПРАВЛЕНО: данные для order flow передаем напрямую
+                    console.log("📍 Initializing order flow");
                     
                     return {
-                        screen: "ORDER_TYPE", // ИСПРАВЛЕНО: используем ID из JSON
+                        screen: "ORDER_TYPE",
                         data: {
-                            // ИСПРАВЛЕНО: структура данных должна соответствовать JSON Flow
-                            user_address: userAddress  // Это будет доступно как ${data.user_address}
+                            user_address: "ул. Исы Ахунбаева 125в, кв. 10"  // Захардкоженный адрес пока
                         }
                     };
                 }
@@ -868,6 +857,7 @@ async function processFlowData(data) {
         };
     }
 }
+
 
 // ИСПРАВЛЕННАЯ функция handleDataExchange
 async function handleDataExchange(screen, data, flow_token) {
