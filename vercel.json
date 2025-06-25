@@ -2,9 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.js",
-      "runtime": "nodejs18.x",
-      "use": "@vercel/node"
+      "src": "index.js"
     }
   ],
   "routes": [
