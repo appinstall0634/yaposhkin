@@ -711,9 +711,9 @@ app.post("/flow", async (req, res) => {
             case "ping":
                 console.log("🏓 Ping request");
                 return res.status(200).json({
-                    version: "5.0",
+                    version: "3.0",
                     data: {
-                        status: "active"
+                        status: "ping"
                     }
                 });
 
