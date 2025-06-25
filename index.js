@@ -769,7 +769,7 @@ function handleEncryptedRequest(req, res) {
         const response = {
             version: "3.0",
             data: {
-                status: "ping"
+                status: "active"
             }
         };
 
