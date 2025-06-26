@@ -823,6 +823,17 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
         
         console.log("✅ Ответ preorder API:", preorderResponse.data);
         
+        // Проверяем наличие ошибки в ответе даже при статусе 200
+        if (preorderResponse.data.error) {
+            console.log("❌ Обнаружена ошибка в ответе API:", preorderResponse.data.error);
+            throw {
+                response: {
+                    status: 200,
+                    data: preorderResponse.data
+                }
+            };
+        }
+        
         // Отправляем сообщение об успехе
         await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle);
 
@@ -864,6 +875,25 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             } else {
                 // Другие ошибки API
                 errorMessage = `❌ Ошибка оформления заказа: ${errorDescription}\n\n`;
+                errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
+            }
+        } else if (error.response?.data?.error?.type) {
+            // Обработка ошибок по типу
+            const errorType = error.response.data.error.type;
+            
+            if (errorType === "LocationIsClosedException") {
+                console.log("🔒 Филиал закрыт (по типу ошибки)");
+                
+                const workingHours = await getLocationWorkingHours(locationId);
+                
+                errorMessage = `⏰ К сожалению, ${orderType === 'delivery' ? 'доставка' : 'самовывоз'} сейчас недоступен.\n\n`;
+                errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
+                if (workingHours) {
+                    errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
+                }
+                errorMessage += `Вы можете оформить заказ в рабочее время или связаться с нашим менеджером.`;
+            } else {
+                errorMessage = `❌ Ошибка: ${errorType}\n\n`;
                 errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
             }
         } else if (error.response?.status === 400) {
