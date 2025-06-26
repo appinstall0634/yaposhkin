@@ -746,7 +746,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: customerData.customer.first_name || "Клиент",
+                firstName: "Тест",
                 comment: "Не реальный заказ",
                 contactMethod: {
                     type: "phoneNumber",
