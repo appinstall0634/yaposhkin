@@ -624,6 +624,10 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         let locationTitle = "";
         let orderType = "pickup"; // По умолчанию самовывоз
         let deliveryAddress = "";
+
+        console.log(`type order is ${userState.order_type}`)
+
+        console.log(`userState is ${userState}`)
         
         // Определяем тип заказа и рассчитываем доставку
         if (userState && userState.order_type === 'delivery') {
