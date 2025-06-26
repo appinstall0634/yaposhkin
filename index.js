@@ -654,7 +654,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             }
             
             // Если есть координаты - рассчитываем доставку
-            if (address?.geocoding_json?.latitude && address?.geocoding_json?.longitude) {
+            if (address.geocoding_json.latitude && address.geocoding_json.longitude) {
                 const lat = address.geocoding_json.latitude;
                 const lon = address.geocoding_json.longitude;
                 
