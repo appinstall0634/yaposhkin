@@ -652,8 +652,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 console.log(`This is address lati2 ${address.geocoding_json.latitude}`);
                 console.log(`This is address longitude2 ${address.geocoding_json.longitude}`);
             }
-            const tempLat = address.geocoding_json.latitude;
-            const tempLon = address.geocoding_json.longitude;
+            const tempLat = address?.geocoding_json.latitude;
+            const tempLon = address?.geocoding_json.longitude;
             // Если есть координаты - рассчитываем доставку
             if (tempLat && tempLon) {
                 const lat = tempLat;
