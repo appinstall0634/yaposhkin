@@ -635,6 +635,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             orderType = "delivery";
             
             let address = null;
+            let tempLat = null;
+            let tempLon = null;
             
             // Определяем адрес
             if (userState.delivery_choice === 'new') {
@@ -642,6 +644,11 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 const addresses = customerData.customer.addresses || [];
                 address = addresses[addresses.length - 1]; // Последний добавленный
                 deliveryAddress = userState.new_address || address?.full_address || "";
+                console.log(`This is address ${address}`);
+                console.log(`This is address lati2 ${address.geocoding_json.latitude}`);
+                tempLat = address.geocoding_json.latitude;
+                console.log(`This is address longitude2 ${address.geocoding_json.longitude}`);
+                tempLon = address.geocoding_json.longitude;
             } else {
                 // Существующий адрес
                 const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
@@ -654,10 +661,12 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
 
                 console.log(`This is address ${address}`);
                 console.log(`This is address lati2 ${address.geocoding_json.latitude}`);
+                tempLat = address.geocoding_json.latitude;
                 console.log(`This is address longitude2 ${address.geocoding_json.longitude}`);
+                tempLon = address.geocoding_json.longitude;
             }
             // Если есть координаты - рассчитываем доставку
-            if (address?.geocoding_json?.latitude && address?.geocoding_json?.longitude) {
+            if (tempLat && tempLon) {
                 const lat = tempLat;
                 const lon = tempLon;
                 
