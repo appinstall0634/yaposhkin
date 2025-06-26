@@ -659,10 +659,10 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     
                     console.log("🚚 Ответ delivery API:", deliveryResponse.data);
                     
-                    if (deliveryResponse.data.is_deliverable) {
-                        deliveryCost = deliveryResponse.data.delivery_cost || 0;
-                        locationId = deliveryResponse.data.restaurant_id;
-                        locationTitle = deliveryResponse.data.title || "Ресторан";
+                    if (deliveryResponse.data[0]) {
+                        deliveryCost = deliveryResponse.data[0].delivery_cost || 0;
+                        locationId = deliveryResponse.data[0].restaurant_id;
+                        locationTitle = deliveryResponse.data[0].title || "Ресторан";
                     } else {
                         // Доставка недоступна - переключаемся на самовывоз
                         orderType = "pickup";
