@@ -643,6 +643,9 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
                 address = customerData.customer.addresses?.[addressIndex];
                 deliveryAddress = address?.full_address || "";
+                console.log(`This is address index ${[addressIndex]}`);
+
+                console.log(`This is address ${address}`);
             }
             
             // Если есть координаты - рассчитываем доставку
