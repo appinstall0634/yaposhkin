@@ -1632,6 +1632,270 @@ app.get("/flow", (req, res) => {
     res.status(200).json(status);
 });
 
+
+
+
+// order-status
+// POST endpoint для отправки уведомления о статусе заказа
+app.post("/order-status", async (req, res) => {
+    try {
+        console.log("=== ПОЛУЧЕН ЗАПРОС НА ОБНОВЛЕНИЕ СТАТУСА ЗАКАЗА ===");
+        console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+        const { 
+            phone, 
+            order_id, 
+            status, 
+            order_type, 
+            location_title,
+            estimated_time,
+            additional_info 
+        } = req.body;
+
+        // Валидация обязательных полей
+        if (!phone || !order_id || !status) {
+            return res.status(400).json({
+                success: false,
+                error: "Обязательные поля: phone, order_id, status"
+            });
+        }
+
+        // Получаем phone_number_id из переменных окружения
+        const phone_no_id = process.env.PHONE_NUMBER_ID;
+        if (!phone_no_id) {
+            return res.status(500).json({
+                success: false,
+                error: "PHONE_NUMBER_ID не настроен в переменных окружения"
+            });
+        }
+
+        // Отправляем уведомление клиенту
+        const result = await sendOrderStatusNotification(
+            phone_no_id, 
+            phone, 
+            order_id, 
+            status, 
+            order_type, 
+            location_title,
+            estimated_time,
+            additional_info
+        );
+
+        if (result.success) {
+            res.status(200).json({
+                success: true,
+                message: "Уведомление отправлено успешно",
+                whatsapp_message_id: result.message_id
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: result.error
+            });
+        }
+
+    } catch (error) {
+        console.error("❌ Ошибка обработки статуса заказа:", error);
+        res.status(500).json({
+            success: false,
+            error: "Внутренняя ошибка сервера"
+        });
+    }
+});
+
+// Функция отправки уведомления о статусе заказа
+async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, status, orderType = 'pickup', locationTitle = '', estimatedTime = '', additionalInfo = '') {
+    try {
+        console.log(`📱 Отправляем уведомление о статусе "${status}" для заказа ${orderId} клиенту ${customerPhone}`);
+
+        // Формируем сообщение в зависимости от статуса
+        const message = formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo);
+
+        // Отправляем сообщение
+        const response = await sendMessage(phone_no_id, customerPhone, message);
+
+        console.log("✅ Уведомление о статусе заказа отправлено успешно");
+        
+        return {
+            success: true,
+            message_id: response.messages?.[0]?.id
+        };
+
+    } catch (error) {
+        console.error("❌ Ошибка отправки уведомления о статусе:", error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+// Функция форматирования сообщений для разных статусов
+function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo) {
+    const emoji = getStatusEmoji(status);
+    const statusText = getStatusText(status);
+    
+    let message = `${emoji} ${statusText}\n\n`;
+    message += `📋 Заказ №${orderId}\n`;
+
+    switch (status.toLowerCase()) {
+        case 'confirmed':
+        case 'подтвержден':
+            message += `✅ Ваш заказ подтвержден и принят в работу!\n\n`;
+            if (orderType === 'delivery') {
+                message += `🚗 Тип: Доставка\n`;
+                if (estimatedTime) {
+                    message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
+                }
+            } else {
+                message += `🏪 Тип: Самовывоз\n`;
+                if (locationTitle) {
+                    message += `📍 Филиал: ${locationTitle}\n`;
+                }
+                if (estimatedTime) {
+                    message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n`;
+                }
+            }
+            message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
+            break;
+
+        case 'preparing':
+        case 'готовится':
+            message += `👨‍🍳 Наши повара готовят ваш заказ!\n\n`;
+            if (estimatedTime) {
+                message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n\n`;
+            }
+            message += `🍣 Мы используем только свежие ингредиенты и готовим с любовью!`;
+            break;
+
+        case 'ready':
+        case 'готов':
+            if (orderType === 'delivery') {
+                message += `🚗 Ваш заказ готов и передан курьеру!\n\n`;
+                message += `📍 Курьер уже в пути к вам.\n`;
+                if (estimatedTime) {
+                    message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
+                }
+                message += `\n📞 Курьер свяжется с вами перед прибытием.`;
+            } else {
+                message += `🎉 Ваш заказ готов к выдаче!\n\n`;
+                if (locationTitle) {
+                    message += `📍 Филиал: ${locationTitle}\n`;
+                }
+                message += `🏪 Приезжайте за заказом в удобное для вас время.\n`;
+                message += `\n💳 Оплата при получении.`;
+            }
+            break;
+
+        case 'out_for_delivery':
+        case 'в_доставке':
+            message += `🚗 Курьер в пути!\n\n`;
+            message += `📍 Ваш заказ доставляется по указанному адресу.\n`;
+            if (estimatedTime) {
+                message += `⏰ Ожидаемое время прибытия: ${estimatedTime}\n`;
+            }
+            message += `\n📞 Курьер свяжется с вами при приближении к адресу.`;
+            break;
+
+        case 'delivered':
+        case 'доставлен':
+            message += `✅ Заказ успешно доставлен!\n\n`;
+            message += `🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+            message += `⭐ Будем рады вашему отзыву о качестве блюд и сервисе.\n`;
+            message += `\n🍣 Ждем вас снова!`;
+            break;
+
+        case 'completed':
+        case 'выполнен':
+            message += `✅ Заказ выполнен!\n\n`;
+            message += `🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+            message += `⭐ Будем рады вашему отзыву о качестве блюд и сервисе.\n`;
+            message += `\n🍣 Ждем вас снова!`;
+            break;
+
+        case 'cancelled':
+        case 'отменен':
+            message += `❌ Заказ отменен\n\n`;
+            if (additionalInfo) {
+                message += `📝 Причина: ${additionalInfo}\n\n`;
+            }
+            message += `😔 Приносим извинения за неудобства.\n`;
+            message += `📞 Если у вас есть вопросы, свяжитесь с нами.\n`;
+            message += `\n🍣 Будем рады видеть вас снова!`;
+            break;
+
+        case 'delayed':
+        case 'задержан':
+            message += `⏰ Небольшая задержка заказа\n\n`;
+            if (estimatedTime) {
+                message += `🕐 Новое ожидаемое время: ${estimatedTime}\n`;
+            }
+            if (additionalInfo) {
+                message += `📝 Причина задержки: ${additionalInfo}\n`;
+            }
+            message += `\n😔 Приносим извинения за задержку.\n`;
+            message += `📞 Если у вас есть вопросы, свяжитесь с нами.`;
+            break;
+
+        default:
+            message += `📋 Статус заказа обновлен: ${status}\n\n`;
+            if (additionalInfo) {
+                message += `📝 Дополнительная информация: ${additionalInfo}\n\n`;
+            }
+            message += `📞 Если у вас есть вопросы, свяжитесь с нами.`;
+    }
+
+    return message;
+}
+
+// Функция получения эмодзи для статуса
+function getStatusEmoji(status) {
+    const emojiMap = {
+        'confirmed': '✅',
+        'подтвержден': '✅',
+        'preparing': '👨‍🍳',
+        'готовится': '👨‍🍳',
+        'ready': '🎉',
+        'готов': '🎉',
+        'out_for_delivery': '🚗',
+        'в_доставке': '🚗',
+        'delivered': '✅',
+        'доставлен': '✅',
+        'completed': '✅',
+        'выполнен': '✅',
+        'cancelled': '❌',
+        'отменен': '❌',
+        'delayed': '⏰',
+        'задержан': '⏰'
+    };
+    
+    return emojiMap[status.toLowerCase()] || '📋';
+}
+
+// Функция получения текста статуса
+function getStatusText(status) {
+    const statusMap = {
+        'confirmed': 'Заказ подтвержден',
+        'подтвержден': 'Заказ подтвержден',
+        'preparing': 'Заказ готовится',
+        'готовится': 'Заказ готовится',
+        'ready': 'Заказ готов',
+        'готов': 'Заказ готов',
+        'out_for_delivery': 'Заказ в доставке',
+        'в_доставке': 'Заказ в доставке',
+        'delivered': 'Заказ доставлен',
+        'доставлен': 'Заказ доставлен',
+        'completed': 'Заказ выполнен',
+        'выполнен': 'Заказ выполнен',
+        'cancelled': 'Заказ отменен',
+        'отменен': 'Заказ отменен',
+        'delayed': 'Заказ задержан',
+        'задержан': 'Заказ задержан'
+    };
+    
+    return statusMap[status.toLowerCase()] || `Статус: ${status}`;
+}
+
 app.get("/", (req, res) => {
     res.status(200).send("hello this is webhook setup");
 });
