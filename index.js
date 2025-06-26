@@ -644,7 +644,9 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 // address = customerData.customer.addresses?.[addressIndex];
                 const address = customerData.customer.addresses.find(item => item.locationId === addressIndex);
                 deliveryAddress = address?.full_address || "";
-                console.log(`This is address index ${[addressIndex]}`);
+                console.log(`This is address index ${addressIndex}`);
+
+                console.log(`This is addresses ${customerData.customer.addresses}`);
 
                 console.log(`This is address ${address}`);
             }
