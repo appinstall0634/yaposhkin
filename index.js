@@ -134,7 +134,7 @@ async function handleLocationMessage(phone_no_id, from, message) {
         await updateCustomerWithLocation(phone_no_id, from, userState, longitude, latitude);
         
         // Очищаем состояние
-        userStates.delete(from);
+        // userStates.delete(from);
         
     } catch (error) {
         console.error("❌ Ошибка обработки местоположения:", error);
