@@ -699,7 +699,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     console.log("❌ Доставка недоступна по указанному адресу");
                     await sendMessage(phone_no_id, from, "❌ К сожалению, доставка по этому адресу недоступна. Попробуйте указать другой адрес или обратитесь к менеджеру.");
                     userStates.delete(from);
-                    return;
+                    return; 
                 }
             } catch (deliveryError) {
                 console.error("❌ Ошибка запроса доставки:", deliveryError);
