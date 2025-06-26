@@ -338,7 +338,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer) {
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
                     flow_cta: "Оформить заказ",
-                    flow_action: "data_exchange",
+                    flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
                         data: {
