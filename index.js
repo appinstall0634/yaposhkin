@@ -18,6 +18,9 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '4265839023734503'; // newCustomer
 const ORDER_FLOW_ID = '708820881926236'; // order
 
+// Состояния пользователей для отслеживания процесса
+const userStates = new Map();
+
 app.listen(PORT, () => {
     console.log("webhook is listening");
     console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
@@ -62,7 +65,11 @@ app.post("/webhook", async (req, res) => {
 
             try {
                 // Проверяем тип сообщения
-                if (message.type === "interactive") {
+                if (message.type === "location") {
+                    // Пользователь отправил местоположение
+                    console.log("📍 Обрабатываем местоположение");
+                    await handleLocationMessage(phone_no_id, from, message);
+                } else if (message.type === "interactive") {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
@@ -101,6 +108,113 @@ app.post("/webhook", async (req, res) => {
     }
 });
 
+// Обработка местоположения
+async function handleLocationMessage(phone_no_id, from, message) {
+    try {
+        console.log("=== ОБРАБОТКА МЕСТОПОЛОЖЕНИЯ ===");
+        
+        const location = message.location;
+        const longitude = location.longitude;
+        const latitude = location.latitude;
+        
+        console.log(`📍 Получено местоположение: ${latitude}, ${longitude}`);
+        
+        // Получаем состояние пользователя
+        const userState = userStates.get(from);
+        
+        if (!userState) {
+            console.log("❌ Состояние пользователя не найдено");
+            await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте заново оформить заказ.");
+            return;
+        }
+        
+        console.log("👤 Состояние пользователя:", userState);
+        
+        // Обновляем клиента с новым адресом
+        await updateCustomerWithLocation(phone_no_id, from, userState, longitude, latitude);
+        
+        // Очищаем состояние
+        userStates.delete(from);
+        
+    } catch (error) {
+        console.error("❌ Ошибка обработки местоположения:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка при сохранении адреса. Попробуйте еще раз.");
+    }
+}
+
+// Обновление клиента с местоположением
+async function updateCustomerWithLocation(phone_no_id, from, userState, longitude, latitude) {
+    try {
+        console.log("=== ОБНОВЛЕНИЕ КЛИЕНТА С МЕСТОПОЛОЖЕНИЕМ ===");
+        
+        // Получаем qr_token
+        const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
+        const qr_token = customerResponse.data.qr_access_token;
+        
+        console.log("🔑 QR Token:", qr_token);
+        
+        // Формируем данные для обновления
+        const updateData = {
+            firstName: userState.customer_name,
+            addresses: [{
+                fullAddress: userState.delivery_address,
+                office: "",
+                floor: "",
+                doorcode: "",
+                entrance: "",
+                comment: "",
+                geocoding: {
+                    datasource: "yandex",
+                    longitude: longitude,
+                    latitude: latitude,
+                    country: "Кыргызстан",
+                    countrycode: "KG",
+                    city: "Бишкек",
+                    street: "",
+                    house: "",
+                    date: ""
+                }
+            }]
+        };
+        
+        console.log("📝 Данные для обновления:", updateData);
+        
+        // Отправляем запрос на обновление
+        const updateResponse = await axios.post(
+            `${TEMIR_API_BASE}/qr/update-customer/?qr_token=${qr_token}`,
+            updateData
+        );
+        
+        console.log("✅ Клиент успешно обновлен:", updateResponse.data);
+        
+        // Отправляем подтверждение
+        if (userState.flow_type === 'new_customer') {
+            const confirmText = `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
+            await sendMessage(phone_no_id, from, confirmText);
+        } else {
+            const confirmText = `✅ Новый адрес добавлен!\n\n📍 ${userState.delivery_address}\n\nТеперь выберите блюда из каталога:`;
+            await sendMessage(phone_no_id, from, confirmText);
+        }
+        
+        // Отправляем каталог через 2 секунды
+        setTimeout(async () => {
+            await sendCatalog(phone_no_id, from);
+        }, 2000);
+        
+    } catch (error) {
+        console.error("❌ Ошибка обновления клиента:", error);
+        
+        let errorMessage = "Произошла ошибка при сохранении данных.";
+        if (error.response?.status === 400) {
+            errorMessage = "Некорректные данные. Попробуйте еще раз.";
+        } else if (error.response?.status === 404) {
+            errorMessage = "Клиент не найден. Попробуйте зарегистрироваться заново.";
+        }
+        
+        await sendMessage(phone_no_id, from, errorMessage);
+    }
+}
+
 // Обработка входящих сообщений - проверка клиента
 async function handleIncomingMessage(phone_no_id, from, message) {
     console.log("=== ПРОВЕРКА КЛИЕНТА ===");
@@ -134,8 +248,8 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
             console.log('🆕 Новый клиент - отправляем регистрационный Flow');
             await sendNewCustomerFlow(phone_no_id, from);
         } else {
-            console.log('✅ Существующий клиент - отправляем приветствие и каталог');
-            await sendExistingCustomerGreeting(phone_no_id, from, customerData.customer);
+            console.log('✅ Существующий клиент - отправляем приветствие и Flow с адресами');
+            await sendExistingCustomerFlow(phone_no_id, from, customerData.customer);
         }
 
     } catch (error) {
@@ -183,17 +297,164 @@ async function sendNewCustomerFlow(phone_no_id, from) {
     await sendWhatsAppMessage(phone_no_id, flowData);
 }
 
-// Приветствие и каталог для существующих клиентов
-async function sendExistingCustomerGreeting(phone_no_id, from, customer) {
-    // Приветствие
-    const greetingText = `Привет, ${customer.first_name}! 👋\n\nРады снова вас видеть в Yaposhkin Rolls! 🍣\n\nВыберите блюда из нашего каталога:`;
-    await sendMessage(phone_no_id, from, greetingText);
+// Отправка Flow для существующих клиентов
+async function sendExistingCustomerFlow(phone_no_id, from, customer) {
+    console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
+    
+    // Формируем массив адресов в формате объектов для dropdown
+    const addresses = customer.addresses.map((addr, index) => ({
+        id: `address_${index}`,
+        title: addr.fullAddress
+    }));
+    
+    // Добавляем опцию "Новый адрес"
+    addresses.push({
+        id: "new",
+        title: "➕ Новый адрес"
+    });
+    
+    console.log("📍 Адреса клиента:", addresses);
+    
+    const flowData = {
+        messaging_product: "whatsapp",
+        to: from,
+        type: "interactive",
+        interactive: {
+            type: "flow",
+            header: {
+                type: "text",
+                text: "🛒 Оформление заказа"
+            },
+            body: {
+                text: `Привет, ${customer.first_name}! Настройте детали заказа`
+            },
+            footer: {
+                text: "Выберите тип доставки и адрес"
+            },
+            action: {
+                name: "flow",
+                parameters: {
+                    flow_message_version: "3",
+                    flow_token: `existing_customer_${Date.now()}`,
+                    flow_id: ORDER_FLOW_ID,
+                    flow_cta: "Оформить заказ",
+                    flow_action: "data_exchange",
+                    flow_action_payload: {
+                        screen: "ORDER_TYPE",
+                        data: {
+                            customer_name: customer.first_name,
+                            user_addresses: addresses
+                        }
+                    }
+                }
+            }
+        }
+    };
 
-    // Отправляем каталог сразу после приветствия
-    setTimeout(async () => {
-        await sendCatalog(phone_no_id, from);
-    }, 1000);
+    await sendWhatsAppMessage(phone_no_id, flowData);
 }
+
+// Обработка ответов Flow
+async function handleFlowResponse(phone_no_id, from, message, body_param) {
+    try {
+        console.log("=== ОБРАБОТКА FLOW ОТВЕТА ===");
+        
+        const flowResponse = JSON.parse(message.interactive.nfm_reply.response_json);
+        const customerProfile = body_param.entry[0].changes[0].value.contacts[0].profile.name;
+        
+        console.log('Телефон клиента:', from);
+        console.log('Имя профиля WhatsApp:', customerProfile);
+        console.log('Данные из Flow:', flowResponse);
+
+        // Определяем тип Flow по данным
+        if (flowResponse.flow_type === 'new_customer') {
+            await handleNewCustomerRegistration(phone_no_id, from, flowResponse);
+        } else if (flowResponse.flow_type === 'existing_customer') {
+            await handleExistingCustomerOrder(phone_no_id, from, flowResponse);
+        } else {
+            // Это order flow - обрабатываем заказ
+            await handleOrderCompletion(phone_no_id, from, flowResponse);
+        }
+
+    } catch (error) {
+        console.error("Ошибка обработки Flow ответа:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка при обработке формы. Попробуйте еще раз.");
+    }
+}
+
+// Обработка регистрации нового клиента
+async function handleNewCustomerRegistration(phone_no_id, from, data) {
+    try {
+        console.log('📝 Регистрируем нового клиента:', data);
+
+        // Сохраняем состояние для ожидания местоположения
+        userStates.set(from, {
+            flow_type: 'new_customer',
+            customer_name: data.customer_name,
+            delivery_address: data.delivery_address
+        });
+
+        // Отправляем запрос местоположения
+        await sendLocationRequest(phone_no_id, from, data.customer_name);
+
+    } catch (error) {
+        console.error('❌ Ошибка регистрации:', error);
+        await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при регистрации. Попробуйте позже.');
+    }
+}
+
+// Обработка заказа существующего клиента
+async function handleExistingCustomerOrder(phone_no_id, from, data) {
+    try {
+        console.log('🛒 Обрабатываем заказ существующего клиента:', data);
+        
+        // Проверяем выбран ли новый адрес
+        if (data.delivery_choice === 'new' && data.new_address) {
+            console.log('📍 Клиент выбрал новый адрес:', data.new_address);
+            
+            // Сохраняем состояние для ожидания местоположения
+            userStates.set(from, {
+                flow_type: 'existing_customer',
+                customer_name: data.customer_name || 'Клиент',
+                delivery_address: data.new_address
+            });
+            
+            // Отправляем запрос местоположения
+            await sendLocationRequest(phone_no_id, from, data.customer_name);
+            
+        } else {
+            console.log('✅ Клиент выбрал существующий адрес - отправляем каталог');
+            
+            // Клиент выбрал существующий адрес - сразу отправляем каталог
+            const confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\nВыберите блюда из каталога:`;
+            await sendMessage(phone_no_id, from, confirmText);
+            
+            // Отправляем каталог через 1 секунду
+            setTimeout(async () => {
+                await sendCatalog(phone_no_id, from);
+            }, 1000);
+        }
+        
+    } catch (error) {
+        console.error('❌ Ошибка обработки заказа:', error);
+        await sendMessage(phone_no_id, from, 'Извините, произошла ошибка. Попробуйте еще раз.');
+    }
+}
+
+// Отправка запроса местоположения
+async function sendLocationRequest(phone_no_id, from, customerName) {
+    console.log("=== ЗАПРОС МЕСТОПОЛОЖЕНИЯ ===");
+    
+    const locationText = `Спасибо, ${customerName}! 📍\n\nДля точной доставки, пожалуйста, поделитесь своим местоположением.\n\nНажмите на скрепку 📎 → Местоположение 📍 → Отправить текущее местоположение`;
+    
+    await sendMessage(phone_no_id, from, locationText);
+}
+
+// Остальные функции остаются без изменений...
+// [Здесь идут все остальные функции из оригинального кода: 
+// handleCatalogOrderResponse, handleButtonResponse, handleCatalogResponse, 
+// sendOrderFlow, handleOrderCompletion, getAllProducts, getProductInfo, 
+// getBranchInfo, sendWhatsAppMessage, sendCatalog, sendMessage, и т.д.]
 
 // Обработка ответа от каталога в формате order
 async function handleCatalogOrderResponse(phone_no_id, from, message) {
@@ -250,7 +511,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
     }
 }
 
-// Обработка ответа от кнопок
+// Остальные функции...
 async function handleButtonResponse(phone_no_id, from, message) {
     try {
         console.log("=== ОТВЕТ ОТ КНОПКИ ===");
@@ -264,7 +525,6 @@ async function handleButtonResponse(phone_no_id, from, message) {
     }
 }
 
-// Обработка ответа от каталога
 async function handleCatalogResponse(phone_no_id, from, message) {
     try {
         console.log("=== ОТВЕТ ОТ КАТАЛОГА (PRODUCT LIST) ===");
@@ -302,92 +562,64 @@ async function handleCatalogResponse(phone_no_id, from, message) {
 async function sendOrderFlow(phone_no_id, from) {
     console.log("=== ОТПРАВКА ORDER FLOW ===");
     
-    const flowData = {
-        messaging_product: "whatsapp",
-        to: from,
-        type: "interactive",
-        interactive: {
-            type: "flow",
-            header: {
-                type: "text",
-                text: "🛒 Оформление заказа"
-            },
-            body: {
-                text: "Настройте детали вашего заказа"
-            },
-            footer: {
-                text: "Выберите тип доставки и время"
-            },
-            action: {
-                name: "flow",
-                parameters: {
-                    flow_message_version: "3",
-                    flow_token: `order_${from}_${Date.now()}`,
-                    flow_id: ORDER_FLOW_ID,
-                    flow_cta: "Оформить заказ",
-                    flow_action: "navigate"  // ИСПРАВЛЕНО: используем navigate вместо data_exchange
-                    // НЕ ДОБАВЛЯЕМ flow_action_payload!
+    try {
+        // Получаем данные клиента для передачи в flow
+        const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
+        const customerData = customerResponse.data;
+        
+        // Формируем массив адресов в формате объектов
+        const addresses = customerData.customer.addresses?.map((addr, index) => ({
+            id: `address_${index}`,
+            title: addr.fullAddress
+        })) || [];
+        
+        // Добавляем опцию "Новый адрес"
+        addresses.push({
+            id: "new", 
+            title: "➕ Новый адрес"
+        });
+        
+        const flowData = {
+            messaging_product: "whatsapp",
+            to: from,
+            type: "interactive",
+            interactive: {
+                type: "flow",
+                header: {
+                    type: "text",
+                    text: "🛒 Оформление заказа"
+                },
+                body: {
+                    text: "Настройте детали вашего заказа"
+                },
+                footer: {
+                    text: "Выберите тип доставки и время"
+                },
+                action: {
+                    name: "flow",
+                    parameters: {
+                        flow_message_version: "3",
+                        flow_token: `order_${Date.now()}`,
+                        flow_id: ORDER_FLOW_ID,
+                        flow_cta: "Оформить заказ",
+                        flow_action: "data_exchange",
+                        flow_action_payload: {
+                            screen: "ORDER_TYPE",
+                            data: {
+                                customer_name: customerData.customer.first_name,
+                                user_addresses: addresses
+                            }
+                        }
+                    }
                 }
             }
-        }
-    };
-
-    await sendWhatsAppMessage(phone_no_id, flowData);
-}
-
-// Обработка ответов Flow
-async function handleFlowResponse(phone_no_id, from, message, body_param) {
-    try {
-        console.log("=== ОБРАБОТКА FLOW ОТВЕТА ===");
-        
-        const flowResponse = JSON.parse(message.interactive.nfm_reply.response_json);
-        const customerProfile = body_param.entry[0].changes[0].value.contacts[0].profile.name;
-        
-        console.log('Телефон клиента:', from);
-        console.log('Имя профиля WhatsApp:', customerProfile);
-        console.log('Данные из Flow:', flowResponse);
-
-        // Определяем тип Flow по данным
-        if (flowResponse.flow_type === 'new_customer') {
-            await handleNewCustomerRegistration(phone_no_id, from, flowResponse);
-        } else {
-            // Это order flow - обрабатываем заказ
-            await handleOrderCompletion(phone_no_id, from, flowResponse);
-        }
-
-    } catch (error) {
-        console.error("Ошибка обработки Flow ответа:", error);
-        await sendMessage(phone_no_id, from, "Произошла ошибка при обработке формы. Попробуйте еще раз.");
-    }
-}
-
-// Обработка регистрации нового клиента
-async function handleNewCustomerRegistration(phone_no_id, from, data) {
-    try {
-        console.log('📝 Регистрируем нового клиента:', data);
-
-        // Здесь отправляем данные в Temir API для создания клиента
-        const customerData = {
-            phone: from,
-            first_name: data.first_name,
-            last_name: data.last_name || '',
-            address: data.address
         };
 
-        // await axios.post(`${TEMIR_API_BASE}/customers/`, customerData);
-
-        // Отправляем подтверждение регистрации
-        const confirmText = `Спасибо за регистрацию, ${data.first_name}! 🎉\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
-        await sendMessage(phone_no_id, from, confirmText);
-
-        // Отправляем каталог через 2 секунды
-        setTimeout(async () => {
-            await sendCatalog(phone_no_id, from);
-        }, 2000);
-
+        await sendWhatsAppMessage(phone_no_id, flowData);
+        
     } catch (error) {
-        console.error('❌ Ошибка регистрации:', error);
-        await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при регистрации. Попробуйте позже.');
+        console.error("Ошибка отправки order flow:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте еще раз.");
     }
 }
 
@@ -459,28 +691,6 @@ async function handleOrderCompletion(phone_no_id, from, data) {
         console.error('❌ Ошибка завершения заказа:', error);
         await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при оформлении заказа. Наш менеджер свяжется с вами.');
     }
-}
-
-// Обработка старого формата Flow (для совместимости)
-async function handleLegacyFlowResponse(phone_no_id, from, flowResponse, customerProfile) {
-    const orderData = {
-        customer_phone: from,
-        whatsapp_name: customerProfile,
-        customer_name: flowResponse.customer_name,
-        delivery_address: flowResponse.delivery_address,
-        delivery_area: flowResponse.delivery_area,
-        payment_method: flowResponse.payment_method,
-        delivery_terms_accepted: flowResponse.delivery_terms,
-        order_timestamp: new Date().toISOString()
-    };
-
-    console.log('Данные заказа сохранены:', orderData);
-
-    await sendGreeting(phone_no_id, from, orderData);
-    
-    setTimeout(async () => {
-        await sendCatalog(phone_no_id, from);
-    }, 2000);
 }
 
 // Кэш товаров для оптимизации
@@ -630,21 +840,6 @@ async function sendCatalog(phone_no_id, to) {
     await sendWhatsAppMessage(phone_no_id, catalogData);
 }
 
-// Отправка приветствия (для совместимости)
-async function sendGreeting(phone_no_id, to, orderData) {
-    const greetingText = `🎉 Спасибо, ${orderData.customer_name}!
-
-✅ Ваши данные успешно сохранены:
-👤 Имя: ${orderData.customer_name}
-📍 Адрес доставки: ${orderData.delivery_address}
-🏙️ Район: ${getAreaName(orderData.delivery_area)}
-💳 Способ оплаты: ${getPaymentMethodName(orderData.payment_method)}
-
-Сейчас отправлю вам наш каталог для выбора блюд! 🍣`;
-
-    return await sendMessage(phone_no_id, to, greetingText);
-}
-
 // Универсальная функция отправки текстового сообщения
 async function sendMessage(phone_no_id, to, text) {
     const messageData = {
@@ -658,28 +853,7 @@ async function sendMessage(phone_no_id, to, text) {
     return await sendWhatsAppMessage(phone_no_id, messageData);
 }
 
-// Вспомогательные функции
-function getAreaName(areaCode) {
-    const areas = {
-        'center': 'Центр города',
-        'north': 'Северный район',
-        'south': 'Южный район',
-        'east': 'Восточный район',
-        'west': 'Западный район'
-    };
-    return areas[areaCode] || areaCode;
-}
-
-function getPaymentMethodName(method) {
-    const methods = {
-        'cash': 'Наличными курьеру',
-        'card': 'Банковской картой',
-        'transfer': 'Переводом'
-    };
-    return methods[method] || method;
-}
-
-
+// Flow endpoint обработка
 app.post("/flow", async (req, res) => {
     console.log("=== FLOW REQUEST ===");
     console.log("Headers:", JSON.stringify(req.headers, null, 2));
@@ -788,7 +962,6 @@ const encryptResponse = (response, aesKeyBuffer, initialVectorBuffer) => {
 };
 
 // Обработка Flow данных
-// ДОПОЛНИТЕЛЬНО: Исправляем processFlowData для передачи данных при INIT
 async function processFlowData(data) {
     console.log("🔄 Processing flow data:", data);
     
@@ -796,6 +969,7 @@ async function processFlowData(data) {
         const { version, action, flow_token, data: flowData, screen } = data;
         
         console.log(`Processing: version=${version}, action=${action}, screen=${screen}, token=${flow_token}`);
+        console.log("Raw flowData:", flowData);
 
         switch (action) {
             case "ping":
@@ -811,29 +985,31 @@ async function processFlowData(data) {
                 
                 if (flow_token && flow_token.includes("new_customer")) {
                     return {
-                        screen: "registration",
+                        screen: "WELCOME_NEW",
                         data: {
-                            flow_type: "new_customer",
-                            welcome_message: "Добро пожаловать в Yaposhkin Rolls!"
+                            flow_type: "new_customer"
                         }
                     };
-                } else if (flow_token && flow_token.includes("order")) {
-                    // ИСПРАВЛЕНО: данные для order flow передаем напрямую
-                    console.log("📍 Initializing order flow");
+                } else if (flow_token && (flow_token.includes("existing_customer") || flow_token.includes("order"))) {
+                    // Для существующих клиентов передаем данные
+                    const customerName = flowData?.customer_name || "";
+                    const userAddresses = flowData?.user_addresses || [];
+                    
+                    console.log("📍 User addresses from payload:", userAddresses);
+                    console.log("👤 Customer name from payload:", customerName);
                     
                     return {
                         screen: "ORDER_TYPE",
                         data: {
-                            user_address: "ул. Исы Ахунбаева 125в, кв. 10"  // Захардкоженный адрес пока
+                            customer_name: customerName,
+                            user_addresses: userAddresses
                         }
                     };
                 }
                 
                 return {
-                    screen: "welcome",
-                    data: {
-                        message: "Добро пожаловать!"
-                    }
+                    screen: "ORDER_TYPE",
+                    data: {}
                 };
 
             case "data_exchange":
@@ -858,30 +1034,62 @@ async function processFlowData(data) {
     }
 }
 
-
-// ИСПРАВЛЕННАЯ функция handleDataExchange
+// Обработка data_exchange в Flow
 async function handleDataExchange(screen, data, flow_token) {
     console.log(`📋 Data exchange for screen: ${screen}`, data);
     
     try {
         switch (screen) {
+            case "WELCOME_NEW":
+                // Переход с приветствия новых клиентов
+                return {
+                    screen: "ORDER_TYPE_NEW",
+                    data: {
+                        customer_name: data.customer_name
+                    }
+                };
+
+            case "ORDER_TYPE_NEW":
+                // Переход от типа заказа новых клиентов
+                return {
+                    screen: "DELIVERY_OPTIONS_NEW",
+                    data: {
+                        customer_name: data.customer_name,
+                        order_type: data.order_type
+                    }
+                };
+
+            case "DELIVERY_OPTIONS_NEW":
+                // Завершение flow новых клиентов
+                return {
+                    screen: "PROMO_AND_TIME",
+                    data: {
+                        customer_name: data.customer_name,
+                        order_type: data.order_type,
+                        branch: data.branch,
+                        delivery_address: data.delivery_address
+                    }
+                };
+
             case "ORDER_TYPE":
-                // Переход с первого экрана на второй
+                // Переход с первого экрана существующих клиентов
                 return {
                     screen: "DELIVERY_OPTIONS",
                     data: {
+                        customer_name: data.customer_name,
                         order_type: data.order_type,
-                        user_address: data.user_address || "ул. Исы Ахунбаева 125в, кв. 10"
+                        user_addresses: data.user_addresses
                     }
                 };
 
             case "DELIVERY_OPTIONS":
-                // Переход со второго экрана на третий
+                // Переход со второго экрана существующих клиентов
                 return {
                     screen: "PROMO_AND_TIME",
                     data: {
+                        customer_name: data.customer_name,
                         order_type: data.order_type,
-                        user_address: data.user_address,
+                        user_addresses: data.user_addresses,
                         branch: data.branch,
                         delivery_choice: data.delivery_choice,
                         new_address: data.new_address
@@ -889,61 +1097,25 @@ async function handleDataExchange(screen, data, flow_token) {
                 };
 
             case "PROMO_AND_TIME":
-                // Завершение Flow - этот случай обрабатывается через "complete" action
-                // Но на всякий случай обрабатываем и здесь
+                // Завершение Flow
                 return {
                     screen: "SUCCESS",
                     data: {
                         extension_message_response: {
                             params: {
                                 flow_token: flow_token,
-                                flow_type: "existing_customer",
+                                flow_type: flow_token.includes("new_customer") ? "new_customer" : "existing_customer",
+                                customer_name: data.customer_name,
                                 order_type: data.order_type,
-                                user_address: data.user_address,
+                                user_addresses: data.user_addresses,
                                 branch: data.branch,
                                 delivery_choice: data.delivery_choice,
                                 new_address: data.new_address,
+                                delivery_address: data.delivery_address, // для новых клиентов
                                 preparation_time: data.preparation_time,
                                 specific_time: data.specific_time,
                                 promo_code: data.promo_code,
-                                comment: data.comment,
-                                order_complete: true
-                            }
-                        }
-                    }
-                };
-
-            case "registration":
-                // Обработка регистрационного Flow (для совместимости)
-                const errors = [];
-                
-                if (!data.first_name || data.first_name.trim().length < 2) {
-                    errors.push("Имя должно содержать минимум 2 символа");
-                }
-                
-                if (!data.address || data.address.trim().length < 10) {
-                    errors.push("Пожалуйста, укажите полный адрес");
-                }
-                
-                if (errors.length > 0) {
-                    return {
-                        screen: "registration",
-                        data: {
-                            error_message: errors.join(", ")
-                        }
-                    };
-                }
-                
-                return {
-                    screen: "SUCCESS",
-                    data: {
-                        extension_message_response: {
-                            params: {
-                                flow_token: flow_token,
-                                flow_type: "new_customer",
-                                customer_name: data.first_name,
-                                customer_address: data.address,
-                                registration_complete: true
+                                comment: data.comment
                             }
                         }
                     }
@@ -953,9 +1125,7 @@ async function handleDataExchange(screen, data, flow_token) {
                 console.log(`❓ Unknown screen: ${screen}`);
                 return {
                     screen: "ORDER_TYPE",
-                    data: {
-                        user_address: "ул. Исы Ахунбаева 125в, кв. 10"
-                    }
+                    data: {}
                 };
         }
     } catch (error) {
@@ -963,34 +1133,9 @@ async function handleDataExchange(screen, data, flow_token) {
         return {
             screen: screen,
             data: {
-                error_message: "Произошла ошибка. Попробуйте еще раз.",
-                user_address: data.user_address || "ул. Исы Ахунбаева 125в, кв. 10"
+                error_message: "Произошла ошибка. Попробуйте еще раз."
             }
         };
-    }
-}
-
-// Получение филиалов для Flow
-async function getBranchesForFlow() {
-    try {
-        const response = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
-        const restaurants = response.data;
-        
-        return restaurants.map(restaurant => ({
-            id: restaurant.external_id.toString(),
-            title: restaurant.title,
-            address: restaurant.address
-        }));
-        
-    } catch (error) {
-        console.error("❌ Error fetching branches:", error);
-        return [
-            {
-                id: "1",
-                title: "Филиал на Чуй",
-                address: "пр. Чуй, 123"
-            }
-        ];
     }
 }
 
@@ -1036,7 +1181,6 @@ app.get("/flow", (req, res) => {
     console.log("📊 Flow status:", status);
     res.status(200).json(status);
 });
-
 
 app.get("/", (req, res) => {
     res.status(200).send("hello this is webhook setup");
