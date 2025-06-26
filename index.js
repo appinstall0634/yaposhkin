@@ -316,6 +316,7 @@ async function sendNewCustomerFlow(phone_no_id, from, branches) {
                     flow_action_payload: {
                         screen: "WELCOME_NEW",
                         data: {
+                            flow_type: "new_customer",
                             branches: branches
                         }
                     }
@@ -372,6 +373,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
                         data: {
+                            flow_type: "existing_customer",
                             customer_name: customer.first_name,
                             user_addresses: addresses,
                             branches: branches
