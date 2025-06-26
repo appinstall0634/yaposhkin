@@ -300,11 +300,12 @@ async function sendNewCustomerFlow(phone_no_id, from) {
 // Отправка Flow для существующих клиентов
 async function sendExistingCustomerFlow(phone_no_id, from, customer) {
     console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
+    console.log(customer.addresses);
     
     // Формируем массив адресов в формате объектов для dropdown
     const addresses = customer.addresses.map((addr, index) => ({
         id: `address_${index}`,
-        title: addr.fullAddress
+        title: addr.full_address
     }));
     
     // Добавляем опцию "Новый адрес"
