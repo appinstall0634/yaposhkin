@@ -300,12 +300,11 @@ async function sendNewCustomerFlow(phone_no_id, from) {
 // Отправка Flow для существующих клиентов
 async function sendExistingCustomerFlow(phone_no_id, from, customer) {
     console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
-    console.log(customer.addresses);
     
     // Формируем массив адресов в формате объектов для dropdown
     const addresses = customer.addresses.map((addr, index) => ({
         id: `address_${index}`,
-        title: addr.full_address
+        title: addr.fullAddress
     }));
     
     // Добавляем опцию "Новый адрес"
@@ -339,7 +338,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer) {
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
                     flow_cta: "Оформить заказ",
-                    flow_action: "navigate",
+                    flow_action: "data_exchange",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
                         data: {
@@ -468,6 +467,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         // Формируем информацию о заказе
         let orderSummary = "🛒 Ваш заказ:\n\n";
         let totalAmount = 0;
+        let orderItems = [];
         
         if (order && order.product_items) {
             console.log("=== ДЕТАЛИ ТОВАРОВ ===");
@@ -481,23 +481,42 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
                 const productInfo = await getProductInfo(item.product_retailer_id);
                 
                 const productName = productInfo.title || `Товар ${item.product_retailer_id}`;
+                const itemPrice = parseFloat(item.item_price) || 0;
+                const itemTotal = itemPrice * item.quantity;
+                
                 console.log(`Название товара: ${productName}`);
                 
                 orderSummary += `${index + 1}. ${productName}\n`;
                 orderSummary += `Количество: ${item.quantity} ${productInfo.measure_unit || 'шт'}\n`;
+                orderSummary += `Цена: ${itemPrice} KGS x ${item.quantity} = ${itemTotal} KGS\n\n`;
                 
-                if (item.item_price) {
-                    const itemTotal = parseFloat(item.item_price) * item.quantity;
-                    orderSummary += `Цена: ${item.item_price} ${item.currency || 'KGS'} x ${item.quantity} = ${itemTotal} ${item.currency || 'KGS'}\n`;
-                    totalAmount += itemTotal;
-                }
+                totalAmount += itemTotal;
                 
-                orderSummary += "\n";
+                // Сохраняем для заказа
+                orderItems.push({
+                    id: parseInt(item.product_retailer_id),
+                    title: productName,
+                    quantity: item.quantity,
+                    priceWithDiscount: null,
+                    dealDiscountId: null,
+                    modifierGroups: []
+                });
             }
         }
         
-        orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n`;
-        orderSummary += "\n📍 Теперь выберите способ получения заказа:";
+        console.log("📦 Товары для заказа:", orderItems);
+        
+        // Сохраняем данные заказа во временном состоянии
+        userStates.set(from, {
+            type: 'pending_order',
+            orderItems: orderItems,
+            totalAmount: totalAmount,
+            orderSummary: orderSummary
+        });
+        
+        orderSummary += `💰 Стоимость товаров: ${totalAmount} KGS\n`;
+        orderSummary += "\n🚚 Рассчитываем стоимость доставки...\n";
+        orderSummary += "📍 Выберите способ получения заказа:";
         
         await sendMessage(phone_no_id, from, orderSummary);
         
@@ -568,10 +587,22 @@ async function sendOrderFlow(phone_no_id, from) {
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
         const customerData = customerResponse.data;
         
+        // Получаем список филиалов для самовывоза
+        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = restaurantsResponse.data;
+        
+        // Формируем филиалы в формате объектов
+        const branches = restaurants.map(restaurant => ({
+            id: restaurant.external_id.toString(),
+            title: `🏪 ${restaurant.title}`
+        }));
+        
+        console.log("🏪 Филиалы:", branches);
+        
         // Формируем массив адресов в формате объектов
         const addresses = customerData.customer.addresses?.map((addr, index) => ({
             id: `address_${index}`,
-            title: addr.fullAddress
+            title: addr.full_address
         })) || [];
         
         // Добавляем опцию "Новый адрес"
@@ -608,7 +639,8 @@ async function sendOrderFlow(phone_no_id, from) {
                             screen: "ORDER_TYPE",
                             data: {
                                 customer_name: customerData.customer.first_name,
-                                user_addresses: addresses
+                                user_addresses: addresses,
+                                branches: branches
                             }
                         }
                     }
@@ -629,68 +661,209 @@ async function handleOrderCompletion(phone_no_id, from, data) {
     try {
         console.log('✅ Завершаем заказ:', data);
 
-        // Получаем детальную информацию о филиале если самовывоз
-        let branchInfo = null;
-        if (data.order_type === 'pickup' && data.branch) {
-            branchInfo = await getBranchInfo(data.branch);
+        // Получаем сохраненные данные заказа
+        const orderState = userStates.get(from);
+        if (!orderState || orderState.type !== 'pending_order') {
+            console.log("❌ Состояние заказа не найдено");
+            await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте заново оформить заказ.");
+            return;
         }
 
-        // Сохраняем заказ в базе данных или отправляем в API
-        const orderData = {
-            phone: from,
-            order_type: data.order_type,
-            branch_id: data.branch,
-            delivery_choice: data.delivery_choice,
-            new_address: data.new_address,
-            preparation_time: data.preparation_time,
-            specific_time: data.specific_time,
-            promo_code: data.promo_code,
-            comment: data.comment
-        };
-
-        // TODO: Отправить заказ в Temir API
-        // await axios.post(`${TEMIR_API_BASE}/orders/`, orderData);
-
-        // Формируем итоговое сообщение
-        let successMessage = '🎉 Заказ успешно оформлен!\n\n';
+        const { orderItems, totalAmount } = orderState;
         
-        if (data.order_type === 'pickup') {
-            if (branchInfo) {
-                successMessage += `📍 Самовывоз из филиала:\n`;
-                successMessage += `🏪 ${branchInfo.title}\n`;
-                successMessage += `📍 ${branchInfo.address}\n`;
-                if (branchInfo.phone) {
-                    successMessage += `📞 ${branchInfo.phone}\n`;
-                }
+        // Получаем данные клиента
+        const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
+        const customerData = customerResponse.data;
+        
+        let deliveryCost = 0;
+        let locationId = null;
+        let locationTitle = "";
+        
+        // Определяем стоимость доставки и локацию
+        if (data.order_type === 'delivery') {
+            console.log("🚚 Рассчитываем стоимость доставки");
+            
+            // Определяем адрес для доставки
+            let deliveryAddress = "";
+            if (data.delivery_choice === 'new' && data.new_address) {
+                deliveryAddress = data.new_address;
             } else {
-                successMessage += `📍 Самовывоз из выбранного филиала\n`;
+                // Ищем адрес по индексу
+                const addressIndex = parseInt(data.delivery_choice.replace('address_', ''));
+                if (customerData.customer.addresses[addressIndex]) {
+                    deliveryAddress = customerData.customer.addresses[addressIndex].full_address;
+                    
+                    // Получаем координаты из адреса
+                    const address = customerData.customer.addresses[addressIndex];
+                    if (address.geocoding) {
+                        const lat = address.geocoding.latitude;
+                        const lon = address.geocoding.longitude;
+                        
+                        console.log(`📍 Координаты доставки: ${lat}, ${lon}`);
+                        
+                        // Запрашиваем стоимость доставки
+                        const deliveryResponse = await axios.get(
+                            `${TEMIR_API_BASE}/qr/delivery/?lat=${lat}&lon=${lon}`
+                        );
+                        
+                        console.log("🚚 Ответ delivery API:", deliveryResponse.data);
+                        
+                        deliveryCost = deliveryResponse.data.delivery_cost || 0;
+                        locationId = deliveryResponse.data.restaurant_id;
+                        locationTitle = deliveryResponse.data.title || "Ресторан";
+                    }
+                }
             }
         } else {
-            successMessage += `🚗 Доставка по адресу\n`;
+            // Самовывоз - получаем данные филиала
+            console.log("🏪 Самовывоз из филиала");
+            const branchInfo = await getBranchInfo(data.branch);
+            if (branchInfo) {
+                locationId = parseInt(data.branch);
+                locationTitle = branchInfo.title;
+            }
         }
-
-        if (data.preparation_time === 'specific') {
-            successMessage += `⏰ Время: ${data.specific_time}\n`;
+        
+        console.log(`💰 Стоимость товаров: ${totalAmount} KGS`);
+        console.log(`🚚 Стоимость доставки: ${deliveryCost} KGS`);
+        console.log(`🏪 Локация: ${locationTitle} (ID: ${locationId})`);
+        
+        const finalAmount = totalAmount + deliveryCost;
+        
+        // Отправляем итоговую стоимость
+        let costMessage = "💰 Итоговая стоимость заказа:\n\n";
+        costMessage += `🛒 Товары: ${totalAmount} KGS\n`;
+        
+        if (data.order_type === 'delivery') {
+            costMessage += `🚚 Доставка: ${deliveryCost} KGS\n`;
         } else {
-            successMessage += `⚡ Готовим как можно скорее\n`;
+            costMessage += `🏪 Самовывоз: 0 KGS\n`;
         }
-
-        if (data.promo_code) {
-            successMessage += `🎁 Промокод: ${data.promo_code}\n`;
-        }
-
-        if (data.comment) {
-            successMessage += `💬 Комментарий: ${data.comment}\n`;
-        }
-
-        successMessage += '\n✅ Заказ принят в обработку!';
-        successMessage += '\n⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.';
-
-        await sendMessage(phone_no_id, from, successMessage);
+        
+        costMessage += `━━━━━━━━━━━━━━━━━━━━\n`;
+        costMessage += `💵 ИТОГО: ${finalAmount} KGS\n\n`;
+        costMessage += `⏳ Оформляем ваш заказ...`;
+        
+        await sendMessage(phone_no_id, from, costMessage);
+        
+        // Формируем данные для preorder
+        const preorderData = {
+            locationId: locationId,
+            locationTitle: locationTitle,
+            type: data.order_type,
+            customerContact: {
+                firstName: customerData.customer.first_name || data.customer_name,
+                comment: data.comment || "",
+                contactMethod: {
+                    type: "phoneNumber",
+                    value: from
+                }
+            },
+            orderDueDateDelta: data.preparation_time === 'specific' ? 
+                calculateTimeDelta(data.specific_time) : 0,
+            guests: [{
+                orderItems: orderItems
+            }],
+            paymentSumWithDiscount: null
+        };
+        
+        console.log("📝 Данные для preorder:", JSON.stringify(preorderData, null, 2));
+        
+        // Отправляем заказ в API
+        const preorderResponse = await axios.post(
+            `${TEMIR_API_BASE}/qr/preorder/?qr_token=${customerData.qr_access_token}`,
+            preorderData
+        );
+        
+        console.log("✅ Ответ preorder API:", preorderResponse.data);
+        
+        // Очищаем состояние
+        userStates.delete(from);
+        
+        // Отправляем сообщение об успехе
+        await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, data, finalAmount);
 
     } catch (error) {
         console.error('❌ Ошибка завершения заказа:', error);
-        await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при оформлении заказа. Наш менеджер свяжется с вами.');
+        
+        // Очищаем состояние в случае ошибки
+        userStates.delete(from);
+        
+        let errorMessage = 'Извините, произошла ошибка при оформлении заказа.';
+        
+        if (error.response?.status === 400) {
+            errorMessage += ' Проверьте корректность данных.';
+        } else if (error.response?.status === 404) {
+            errorMessage += ' Ресторан временно недоступен.';
+        }
+        
+        errorMessage += ' Наш менеджер свяжется с вами.';
+        
+        await sendMessage(phone_no_id, from, errorMessage);
+    }
+}
+
+// Отправка сообщения об успешном заказе
+async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orderData, finalAmount) {
+    try {
+        let successMessage = '🎉 Заказ успешно оформлен!\n\n';
+        
+        if (preorderResponse.status === 'success') {
+            successMessage += `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n`;
+            
+            if (orderData.order_type === 'pickup') {
+                successMessage += `📍 Самовывоз из филиала:\n`;
+                successMessage += `🏪 ${preorderResponse.data.location_title || 'Выбранный филиал'}\n`;
+            } else {
+                successMessage += `🚗 Доставка по адресу\n`;
+            }
+
+            if (orderData.preparation_time === 'specific') {
+                successMessage += `⏰ Время: ${orderData.specific_time}\n`;
+            } else {
+                successMessage += `⚡ Готовим как можно скорее\n`;
+            }
+
+            if (orderData.promo_code) {
+                successMessage += `🎁 Промокод: ${orderData.promo_code}\n`;
+            }
+
+            successMessage += `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
+            successMessage += '✅ Заказ принят в обработку!\n';
+            successMessage += '⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.';
+        } else {
+            successMessage = '❌ Произошла ошибка при оформлении заказа.\n';
+            successMessage += 'Наш менеджер свяжется с вами для уточнения деталей.';
+        }
+
+        await sendMessage(phone_no_id, from, successMessage);
+        
+    } catch (error) {
+        console.error('❌ Ошибка отправки сообщения об успехе:', error);
+    }
+}
+
+// Функция расчета временной дельты
+function calculateTimeDelta(specificTime) {
+    try {
+        if (!specificTime) return 0;
+        
+        const now = new Date();
+        const [hours, minutes] = specificTime.split(':');
+        const targetTime = new Date();
+        targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        
+        // Если время уже прошло, берем завтрашний день
+        if (targetTime <= now) {
+            targetTime.setDate(targetTime.getDate() + 1);
+        }
+        
+        const deltaMinutes = Math.floor((targetTime - now) / (1000 * 60));
+        return Math.max(0, deltaMinutes);
+        
+    } catch (error) {
+        console.error('Ошибка расчета временной дельты:', error);
+        return 0;
     }
 }
 
@@ -1003,7 +1176,8 @@ async function processFlowData(data) {
                         screen: "ORDER_TYPE",
                         data: {
                             customer_name: customerName,
-                            user_addresses: userAddresses
+                            user_addresses: userAddresses,
+                            branches: flowData?.branches || []
                         }
                     };
                 }
@@ -1079,7 +1253,8 @@ async function handleDataExchange(screen, data, flow_token) {
                     data: {
                         customer_name: data.customer_name,
                         order_type: data.order_type,
-                        user_addresses: data.user_addresses
+                        user_addresses: data.user_addresses,
+                        branches: data.branches
                     }
                 };
 
@@ -1091,6 +1266,7 @@ async function handleDataExchange(screen, data, flow_token) {
                         customer_name: data.customer_name,
                         order_type: data.order_type,
                         user_addresses: data.user_addresses,
+                        branches: data.branches,
                         branch: data.branch,
                         delivery_choice: data.delivery_choice,
                         new_address: data.new_address
@@ -1109,6 +1285,7 @@ async function handleDataExchange(screen, data, flow_token) {
                                 customer_name: data.customer_name,
                                 order_type: data.order_type,
                                 user_addresses: data.user_addresses,
+                                branches: data.branches,
                                 branch: data.branch,
                                 delivery_choice: data.delivery_choice,
                                 new_address: data.new_address,
