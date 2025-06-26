@@ -649,9 +649,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 console.log(`This is addresses ${customerData.customer.addresses}`);
 
                 console.log(`This is address ${address}`);
-                console.log(`This is address lati ${address?.geocoding_json?.latitude}`);
                 console.log(`This is address lati2 ${address.geocoding_json.latitude}`);
-                console.log(`This is address longitude ${address?.geocoding_json?.longitude}`);
                 console.log(`This is address longitude2 ${address.geocoding_json.longitude}`);
             }
             
