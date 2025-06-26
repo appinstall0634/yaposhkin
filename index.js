@@ -646,7 +646,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 // Существующий адрес
                 const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
                 // address = customerData.customer.addresses?.[addressIndex];
-                const address = customerData.customer.addresses.find(item => item.id === addressIndex);
+                const address = customerData.customer.addresses.find(item => item.id == addressIndex);
                 deliveryAddress = address?.full_address || "";
                 console.log(`This is address index ${addressIndex}`);
 
@@ -659,7 +659,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             const tempLat = address?.geocoding_json.latitude;
             const tempLon = address?.geocoding_json.longitude;
             // Если есть координаты - рассчитываем доставку
-            if (tempLat && tempLon) {
+            if (address?.geocoding_json?.latitude && address?.geocoding_json?.longitude) {
                 const lat = tempLat;
                 const lon = tempLon;
                 
