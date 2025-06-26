@@ -788,6 +788,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
 }
 
 // Отправка заказа в API
+// Отправка заказа в API
 async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount) {
     try {
         console.log("📝 Отправляем заказ в API");
@@ -798,8 +799,8 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: "Тест",
-                comment: "Не реальный заказ",
+                firstName: customerData.customer.first_name || "Клиент",
+                comment: "Заказ через WhatsApp",
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
@@ -828,17 +829,198 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
     } catch (error) {
         console.error('❌ Ошибка отправки заказа в API:', error);
         
-        let errorMessage = 'Извините, произошла ошибка при оформлении заказа.';
+        let errorMessage = '';
         
-        if (error.response?.status === 400) {
-            errorMessage += ' Проверьте корректность данных.';
+        // Проверяем специфичные ошибки
+        if (error.response?.data?.error?.description) {
+            const errorDescription = error.response.data.error.description;
+            
+            if (errorDescription.includes("Location is closed")) {
+                // Филиал закрыт
+                console.log("🔒 Филиал закрыт");
+                
+                // Получаем информацию о режиме работы
+                const workingHours = await getLocationWorkingHours(locationId);
+                
+                if (orderType === 'delivery') {
+                    errorMessage = `⏰ К сожалению, доставка сейчас недоступна.\n\n`;
+                    errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
+                    if (workingHours) {
+                        errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
+                    }
+                    errorMessage += `Вы можете оформить заказ в рабочее время или связаться с нашим менеджером.`;
+                } else {
+                    errorMessage = `⏰ К сожалению, самовывоз сейчас недоступен.\n\n`;
+                    errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
+                    if (workingHours) {
+                        errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
+                    }
+                    errorMessage += `Вы можете забрать заказ в рабочее время или связаться с нашим менеджером.`;
+                }
+            } else if (errorDescription.includes("out of stock") || errorDescription.includes("unavailable")) {
+                // Товар недоступен
+                errorMessage = `❌ К сожалению, некоторые товары из вашего заказа сейчас недоступны.\n\n`;
+                errorMessage += `Попробуйте выбрать другие блюда из каталога или свяжитесь с нашим менеджером для уточнения наличия.`;
+            } else {
+                // Другие ошибки API
+                errorMessage = `❌ Ошибка оформления заказа: ${errorDescription}\n\n`;
+                errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
+            }
+        } else if (error.response?.status === 400) {
+            errorMessage = `❌ Ошибка в данных заказа.\n\n`;
+            errorMessage += `Попробуйте оформить заказ заново или обратитесь к менеджеру.`;
         } else if (error.response?.status === 404) {
-            errorMessage += ' Ресторан временно недоступен.';
+            errorMessage = `❌ Выбранный филиал временно недоступен.\n\n`;
+            errorMessage += `Попробуйте позже или обратитесь к менеджеру.`;
+        } else if (error.response?.status === 500) {
+            errorMessage = `❌ Технические неполадки на сервере.\n\n`;
+            errorMessage += `Мы уже работаем над решением проблемы. Попробуйте через несколько минут.`;
+        } else {
+            errorMessage = `❌ Произошла ошибка при оформлении заказа.\n\n`;
+            errorMessage += `Наш менеджер свяжется с вами для уточнения деталей.`;
         }
         
-        errorMessage += ' Наш менеджер свяжется с вами.';
-        
         await sendMessage(phone_no_id, from, errorMessage);
+    }
+}
+
+// Получение режима работы филиала
+async function getLocationWorkingHours(locationId) {
+    try {
+        console.log(`🕐 Получаем режим работы для филиала ${locationId}`);
+        
+        // Получаем информацию о ресторанах
+        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = restaurantsResponse.data;
+        
+        // Находим нужный ресторан
+        const restaurant = restaurants.find(r => r.external_id == locationId);
+        
+        if (restaurant && restaurant.schedule) {
+            // Получаем текущий день недели
+            const today = new Date().getDay(); // 0 = воскресенье, 1 = понедельник, и т.д.
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayNamesRu = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+            
+            const todayKey = dayNames[today];
+            const todayNameRu = dayNamesRu[today];
+            
+            // Ищем расписание на сегодня
+            const todaySchedule = restaurant.schedule.find(s => s.day === todayKey);
+            
+            if (todaySchedule) {
+                if (todaySchedule.active) {
+                    // Форматируем время
+                    const timeStart = todaySchedule.timeStart.substring(0, 5); // "11:00:00" -> "11:00"
+                    const timeEnd = todaySchedule.timeEnd.substring(0, 5);     // "23:45:59" -> "23:45"
+                    
+                    return `${todayNameRu}: ${timeStart} - ${timeEnd}`;
+                } else {
+                    return `${todayNameRu}: выходной`;
+                }
+            }
+            
+            // Если не нашли сегодня, показываем общий режим работы
+            const workingDays = restaurant.schedule.filter(s => s.active);
+            if (workingDays.length > 0) {
+                const firstDay = workingDays[0];
+                const timeStart = firstDay.timeStart.substring(0, 5);
+                const timeEnd = firstDay.timeEnd.substring(0, 5);
+                return `Обычно: ${timeStart} - ${timeEnd}`;
+            }
+        }
+        
+        // Режим работы по умолчанию если не найден в API
+        return "11:00 - 23:45";
+        
+    } catch (error) {
+        console.error("❌ Ошибка получения режима работы:", error);
+        // Возвращаем стандартный режим работы
+        return "11:00 - 23:45";
+    }
+}
+
+// Дополнительная функция для получения подробной информации о филиале
+async function getDetailedLocationInfo(locationId) {
+    try {
+        console.log(`🏪 Получаем подробную информацию о филиале ${locationId}`);
+        
+        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = restaurantsResponse.data;
+        
+        const restaurant = restaurants.find(r => r.external_id == locationId);
+        
+        if (restaurant) {
+            // Получаем режим работы на сегодня
+            const today = new Date().getDay();
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const todayKey = dayNames[today];
+            
+            let workingHours = "11:00 - 23:45";
+            let isOpen = false;
+            
+            if (restaurant.schedule) {
+                const todaySchedule = restaurant.schedule.find(s => s.day === todayKey);
+                if (todaySchedule && todaySchedule.active) {
+                    const timeStart = todaySchedule.timeStart.substring(0, 5);
+                    const timeEnd = todaySchedule.timeEnd.substring(0, 5);
+                    workingHours = `${timeStart} - ${timeEnd}`;
+                    
+                    // Проверяем открыт ли сейчас
+                    const now = new Date();
+                    const currentTime = now.getHours() * 100 + now.getMinutes(); // 1530 для 15:30
+                    const startTime = parseInt(todaySchedule.timeStart.replace(':', '').substring(0, 4)); // 1100 для 11:00:00
+                    const endTime = parseInt(todaySchedule.timeEnd.replace(':', '').substring(0, 4));   // 2345 для 23:45:59
+                    
+                    isOpen = currentTime >= startTime && currentTime <= endTime;
+                }
+            }
+            
+            return {
+                id: restaurant.external_id,
+                title: restaurant.title,
+                address: restaurant.address,
+                workingHours: workingHours,
+                phone: restaurant.contacts?.find(c => c.type === 'PHONE')?.value,
+                whatsapp: restaurant.contacts?.find(c => c.type === 'WHATSAPP')?.value,
+                isOpen: isOpen
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error("❌ Ошибка получения информации о филиале:", error);
+        return null;
+    }
+}
+
+// Функция для проверки открыт ли филиал сейчас
+function isLocationOpenNow(schedule) {
+    try {
+        if (!schedule || !Array.isArray(schedule)) {
+            return false;
+        }
+        
+        const now = new Date();
+        const today = now.getDay();
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const todayKey = dayNames[today];
+        
+        const todaySchedule = schedule.find(s => s.day === todayKey);
+        
+        if (!todaySchedule || !todaySchedule.active) {
+            return false;
+        }
+        
+        const currentTime = now.getHours() * 100 + now.getMinutes();
+        const startTime = parseInt(todaySchedule.timeStart.replace(':', '').substring(0, 4));
+        const endTime = parseInt(todaySchedule.timeEnd.replace(':', '').substring(0, 4));
+        
+        return currentTime >= startTime && currentTime <= endTime;
+        
+    } catch (error) {
+        console.error("❌ Ошибка проверки времени работы:", error);
+        return false;
     }
 }
 
