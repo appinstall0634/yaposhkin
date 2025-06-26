@@ -642,7 +642,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 // Существующий адрес
                 const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
                 // address = customerData.customer.addresses?.[addressIndex];
-                const address = customerData.customer.addresses.find(item => item.locationId === addressIndex);
+                const address = customerData.customer.addresses.find(item => item.id === addressIndex);
                 deliveryAddress = address?.full_address || "";
                 console.log(`This is address index ${addressIndex}`);
 
