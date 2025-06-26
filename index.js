@@ -187,6 +187,15 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         console.log("✅ Клиент успешно обновлен:", updateResponse.data);
         
+        // ОБНОВЛЯЕМ состояние вместо очистки - добавляем информацию о том, что местоположение обработано
+        userStates.set(from, {
+            ...userState,
+            order_type: 'delivery', // Принудительно устанавливаем delivery
+            delivery_choice: 'new', // Новый адрес
+            location_processed: true, // Флаг что местоположение обработано
+            new_address: userState.delivery_address // Сохраняем адрес
+        });
+        
         // Отправляем подтверждение
         if (userState.flow_type === 'new_customer') {
             const confirmText = `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
@@ -212,6 +221,8 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         }
         
         await sendMessage(phone_no_id, from, errorMessage);
+        // Очищаем состояние только при ошибке
+        userStates.delete(from);
     }
 }
 
@@ -503,11 +514,16 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
         if (data.order_type === 'delivery' && data.delivery_choice === 'new' && data.new_address) {
             console.log('📍 Клиент выбрал доставку с новым адресом:', data.new_address);
             
-            // Обновляем состояние для запроса местоположения
+            // Обновляем состояние для запроса местоположения, НО СОХРАНЯЕМ ВСЕ ДАННЫЕ
             userStates.set(from, {
                 flow_type: 'existing_customer',
                 customer_name: data.customer_name || 'Клиент',
-                delivery_address: data.new_address
+                delivery_address: data.new_address,
+                // ВАЖНО: сохраняем все данные заказа
+                order_type: data.order_type,
+                delivery_choice: data.delivery_choice,
+                new_address: data.new_address,
+                branch: data.branch
             });
             
             // Отправляем запрос местоположения
@@ -615,6 +631,23 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
 async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, userState) {
     try {
         console.log("=== РАСЧЕТ ДОСТАВКИ И ОФОРМЛЕНИЕ ЗАКАЗА ===");
+        console.log("User state from parameter:", userState);
+        
+        // Если userState пустой, пытаемся получить из Map
+        if (!userState) {
+            console.log("⚠️ User state is null, trying to get from Map");
+            userState = userStates.get(from);
+            console.log("User state from Map:", userState);
+        }
+        
+        // Если все еще нет состояния, создаем базовое для самовывоза
+        if (!userState) {
+            console.log("⚠️ No user state found, defaulting to pickup");
+            userState = {
+                order_type: 'pickup',
+                flow_type: 'fallback'
+            };
+        }
         
         // Получаем данные клиента
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
@@ -623,33 +656,33 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         let deliveryCost = 0;
         let locationId = null;
         let locationTitle = "";
-        let orderType = "pickup"; // По умолчанию самовывоз
+        let orderType = userState.order_type || "pickup"; // Используем из состояния или по умолчанию самовывоз
         let deliveryAddress = "";
 
-        console.log(`type order is ${userState?.order_type}`);
-        console.log(`userState is`, userState);
+        console.log(`📋 Order type from state: ${orderType}`);
+        console.log(`📋 Full userState:`, userState);
         
         // Определяем тип заказа и рассчитываем доставку
-        if (userState && userState.order_type === 'delivery') {
+        if (orderType === 'delivery') {
             console.log("🚚 Обрабатываем доставку");
-            orderType = "delivery";
             
             let address = null;
             let tempLat = null;
             let tempLon = null;
             
             // Определяем адрес
-            if (userState.delivery_choice === 'new') {
+            if (userState.delivery_choice === 'new' || userState.location_processed) {
                 // Новый адрес - ищем в последних добавленных
                 const addresses = customerData.customer.addresses || [];
                 address = addresses[addresses.length - 1]; // Последний добавленный
-                deliveryAddress = userState.new_address || address?.full_address || "";
-                console.log(`This is address ${address}`);
+                deliveryAddress = userState.new_address || userState.delivery_address || address?.full_address || "";
+                console.log(`📍 Using new address: ${deliveryAddress}`);
+                console.log(`📍 Address object:`, address);
                 
                 if (address?.geocoding_json) {
-                    console.log(`This is address latitude ${address.geocoding_json.latitude}`);
+                    console.log(`📍 Address latitude: ${address.geocoding_json.latitude}`);
                     tempLat = address.geocoding_json.latitude;
-                    console.log(`This is address longitude ${address.geocoding_json.longitude}`);
+                    console.log(`📍 Address longitude: ${address.geocoding_json.longitude}`);
                     tempLon = address.geocoding_json.longitude;
                 }
             } else {
@@ -657,14 +690,13 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
                 address = customerData.customer.addresses.find(item => item.id == addressIndex);
                 deliveryAddress = address?.full_address || "";
-                console.log(`This is address index ${addressIndex}`);
-                console.log(`This is addresses`, customerData.customer.addresses);
-                console.log(`This is address`, address);
+                console.log(`📍 Using existing address index ${addressIndex}: ${deliveryAddress}`);
+                console.log(`📍 Address object:`, address);
                 
                 if (address?.geocoding_json) {
-                    console.log(`This is address latitude ${address.geocoding_json.latitude}`);
+                    console.log(`📍 Address latitude: ${address.geocoding_json.latitude}`);
                     tempLat = address.geocoding_json.latitude;
-                    console.log(`This is address longitude ${address.geocoding_json.longitude}`);
+                    console.log(`📍 Address longitude: ${address.geocoding_json.longitude}`);
                     tempLon = address.geocoding_json.longitude;
                 }
             }
@@ -777,7 +809,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         
-        // Очищаем состояние
+        // Очищаем состояние ТОЛЬКО после успешного оформления заказа
         userStates.delete(from);
         
     } catch (error) {
@@ -799,8 +831,9 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: customerData.customer.first_name || "Клиент",
-                comment: "Заказ через WhatsApp",
+                // firstName: customerData.customer.first_name || "Клиент",
+                firstName : "Test",
+                comment: "Не реальный заказ",
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
