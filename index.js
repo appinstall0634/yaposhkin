@@ -333,8 +333,8 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
     console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
     
     // Формируем массив адресов в формате объектов для dropdown
-    const addresses = customer.addresses.map((addr, index) => ({
-        id: `address_${index}`,
+    const addresses = customer.addresses.map((addr) => ({
+        id: `address_${addr.id}`,
         title: addr.full_address
     }));
     
