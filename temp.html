@@ -142,7 +142,6 @@
             const BRAND = "Yaposhkin Rolls";
             const AVAILABILITY = "in stock";
             const CONDITION = "new";
-            const IMAGE_BASE_URL = "https://ve738.quickresto.ru/wlcrm";
             
             const headers = [
                 "id", "title", "description", "availability", 
@@ -174,9 +173,9 @@
                 return `${formattedPrice} KGS`;
             }
             
-            function getImageLink(imageUrl) {
-                if (!imageUrl) return "";
-                return IMAGE_BASE_URL + imageUrl;
+            function getImageLink(imageUrlFull) {
+                if (!imageUrlFull) return "";
+                return imageUrlFull;
             }
             
             let data;
@@ -203,14 +202,14 @@
                 }
                 
                 const row = [
-                    item.id || '',
+                    item.api_id || '',
                     `"${(item.title || '').replace(/"/g, '""')}"`,
                     `"${cleanDescription(item.description).replace(/"/g, '""')}"`,
                     AVAILABILITY,
                     CONDITION,
                     getPrice(item.sales),
                     BASE_LINK,
-                    getImageLink(item.image_url),
+                    getImageLink(item.image_url_full),
                     BRAND
                 ];
                 csvRows.push(row.join(','));
