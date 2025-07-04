@@ -866,13 +866,144 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         let deliveryCost = 0;
         let locationId = null;
         let locationTitle = "";
-        let orderType = userState.order_type || "pickup";
+        let orderType = userState.order_type || "pickup"; // Используем из состояния или по умолчанию самовывоз
         let deliveryAddress = "";
 
         console.log(`📋 Order type from state: ${orderType}`);
         console.log(`📋 Full userState:`, userState);
         
-        // ... (остальная логика расчета доставки остается такой же)
+        // Определяем тип заказа и рассчитываем доставку
+        if (orderType === 'delivery') {
+            console.log("🚚 Обрабатываем доставку");
+            
+            let address = null;
+            let tempLat = null;
+            let tempLon = null;
+            
+            // Определяем адрес
+            if (userState.delivery_choice === 'new' || userState.location_processed) {
+                // Новый адрес - ищем в последних добавленных
+                const addresses = customerData.customer.addresses || [];
+                address = addresses[addresses.length - 1]; // Последний добавленный
+                deliveryAddress = userState.new_address || userState.delivery_address || address?.full_address || "";
+                console.log(`📍 Using new address: ${deliveryAddress}`);
+                console.log(`📍 Address object:`, address);
+                
+                if (address?.geocoding_json) {
+                    console.log(`📍 Address latitude: ${address.geocoding_json.latitude}`);
+                    tempLat = address.geocoding_json.latitude;
+                    console.log(`📍 Address longitude: ${address.geocoding_json.longitude}`);
+                    tempLon = address.geocoding_json.longitude;
+                }
+            } else {
+                // Существующий адрес
+                const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
+                address = customerData.customer.addresses.find(item => item.id == addressIndex);
+                deliveryAddress = address?.full_address || "";
+                console.log(`📍 Using existing address index ${addressIndex}: ${deliveryAddress}`);
+                console.log(`📍 Address object:`, address);
+                
+                if (address?.geocoding_json) {
+                    console.log(`📍 Address latitude: ${address.geocoding_json.latitude}`);
+                    tempLat = address.geocoding_json.latitude;
+                    console.log(`📍 Address longitude: ${address.geocoding_json.longitude}`);
+                    tempLon = address.geocoding_json.longitude;
+                }
+            }
+            
+            // Проверяем наличие координат
+            if (!tempLat || !tempLon) {
+                console.log("❌ Нет координат адреса для доставки");
+                await sendMessage(phone_no_id, from, "❌ Ошибка: не удается определить координаты адреса доставки. Попробуйте указать адрес заново или обратитесь к менеджеру.");
+                userStates.delete(from);
+                clearUserWaitingState(from);
+                return;
+            }
+            
+            // Если есть координаты - рассчитываем доставку
+            const lat = tempLat;
+            const lon = tempLon;
+            
+            console.log(`📍 Координаты доставки: ${lat}, ${lon}`);
+            
+            try {
+                const deliveryResponse = await axios.get(
+                    `${TEMIR_API_BASE}/qr/delivery/?lat=${lat}&lon=${lon}`
+                );
+                
+                console.log("🚚 Ответ delivery API:", deliveryResponse.data);
+                
+                if (deliveryResponse.data[0]) {
+                    deliveryCost = deliveryResponse.data[0].delivery_cost || 0;
+                    locationId = deliveryResponse.data[0].restaurant_id;
+                    locationTitle = deliveryResponse.data[0].title || "Ресторан";
+                } else {
+                    // Доставка недоступна - отправляем ошибку вместо переключения
+                    console.log("❌ Доставка недоступна по указанному адресу");
+                    await sendMessage(phone_no_id, from, "❌ К сожалению, доставка по этому адресу недоступна. Попробуйте указать другой адрес или обратитесь к менеджеру.");
+                    userStates.delete(from);
+                    clearUserWaitingState(from);
+                    return; 
+                }
+            } catch (deliveryError) {
+                console.error("❌ Ошибка запроса доставки:", deliveryError);
+                await sendMessage(phone_no_id, from, "❌ Произошла ошибка при расчете стоимости доставки. Попробуйте позже или обратитесь к менеджеру.");
+                userStates.delete(from);
+                clearUserWaitingState(from);
+                return;
+            }
+        } else {
+            // Если самовывоз - выбираем филиал
+            console.log("🏪 Обрабатываем самовывоз");
+            
+            if (userState?.branch) {
+                // Филиал выбран в Flow
+                const branchInfo = await getBranchInfo(userState.branch);
+                if (branchInfo) {
+                    locationId = parseInt(userState.branch);
+                    locationTitle = branchInfo.title;
+                } else {
+                    console.log("❌ Информация о выбранном филиале не найдена");
+                    await sendMessage(phone_no_id, from, "❌ Ошибка: выбранный филиал недоступен. Попробуйте заново или обратитесь к менеджеру.");
+                    userStates.delete(from);
+                    clearUserWaitingState(from);
+                    return;
+                }
+            } else {
+                // Выбираем первый доступный филиал
+                try {
+                    const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+                    const restaurants = restaurantsResponse.data;
+                    
+                    if (restaurants.length > 0) {
+                        const selectedBranch = restaurants[0];
+                        locationId = selectedBranch.external_id;
+                        locationTitle = selectedBranch.title;
+                    } else {
+                        console.log("❌ Нет доступных филиалов");
+                        await sendMessage(phone_no_id, from, "❌ Извините, в данный момент нет доступных филиалов для самовывоза. Обратитесь к менеджеру.");
+                        userStates.delete(from);
+                        clearUserWaitingState(from);
+                        return;
+                    }
+                } catch (error) {
+                    console.error("❌ Ошибка получения списка филиалов:", error);
+                    await sendMessage(phone_no_id, from, "❌ Ошибка получения информации о филиалах. Попробуйте позже или обратитесь к менеджеру.");
+                    userStates.delete(from);
+                    clearUserWaitingState(from);
+                    return;
+                }
+            }
+        }
+        
+        // Проверяем что у нас есть locationId
+        if (!locationId) {
+            console.log("❌ Не удалось определить локацию для заказа");
+            await sendMessage(phone_no_id, from, "❌ Ошибка определения места выполнения заказа. Обратитесь к менеджеру.");
+            userStates.delete(from);
+            clearUserWaitingState(from);
+            return;
+        }
         
         const finalAmount = totalAmount + deliveryCost;
         
@@ -895,7 +1026,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         
-        // ВАЖНО: Очищаем состояние ТОЛЬКО после успешного оформления заказа
+        // Очищаем состояние ТОЛЬКО после успешного оформления заказа
         userStates.delete(from);
         clearUserWaitingState(from);
         
@@ -918,8 +1049,8 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: customerData.customer.first_name || "Клиент",
-                comment: "Заказ через WhatsApp Bot",
+                firstName: "Test",
+                comment: "Test",
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
