@@ -1441,14 +1441,14 @@ async function sendCatalog(phone_no_id, to) {
             
             await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
             
-            // Небольшая задержка между сообщениями для лучшего UX
-            if (i < categoryGroups.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+            // // Небольшая задержка между сообщениями для лучшего UX
+            // if (i < categoryGroups.length - 1) {
+            //     await new Promise(resolve => setTimeout(resolve, 1000));
+            // }
         }
         
         // Отправляем финальное сообщение
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // await new Promise(resolve => setTimeout(resolve, 2000));
         const finalText = `Выберите понравившиеся блюда из любой категории и добавьте в корзину.`;
         await sendMessage(phone_no_id, to, finalText);
         
