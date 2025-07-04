@@ -1475,7 +1475,7 @@ async function sendCatalog(phone_no_id, to) {
         }
         
         // Отправляем финальное сообщение
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // await new Promise(resolve => setTimeout(resolve, 2000));
         const finalText = "✅ Это весь наш каталог!\n\nВыберите понравившиеся блюда из любой категории и добавьте в корзину. Доставка занимает 30-40 минут. 🚀";
         await sendMessage(phone_no_id, to, finalText);
         
@@ -1518,6 +1518,8 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 product_retailer_id: id
             }))
         }));
+
+        console.log(`section is ${sections}`);
         
         // Подсчитываем общее количество товаров
         const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
@@ -1547,6 +1549,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         
         console.log(`📤 Отправляем product_list с ${sections.length} секциями и ${totalProducts} товарами`);
         console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items.length})`).join(', ')}`);
+                console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items})`).join(', ')}`);
         
         await sendWhatsAppMessage(phone_no_id, productListData);
         
