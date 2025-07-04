@@ -1468,11 +1468,6 @@ async function sendCatalog(phone_no_id, to) {
         for (let i = 0; i < categoryGroups.length; i++) {
             const group = categoryGroups[i];
             
-            // Задержка между отправками (2 секунды)
-            if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-            
             const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
             console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
