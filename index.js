@@ -1524,6 +1524,22 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         // Подсчитываем общее количество товаров
         const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
         
+        // Формируем заголовок с названиями категорий
+        let headerText;
+        if (categories.length === 1) {
+            // Если только одна категория
+            headerText = `🍣 ${categories[0].title}`;
+        } else if (categories.length <= 3) {
+            // Если 2-3 категории, перечисляем их
+            const categoryNames = categories.map(cat => cat.title).join(', ');
+            headerText = `🍣 ${categoryNames}`;
+        } else {
+            // Если много категорий, показываем первые 2 и "+еще X"
+            const firstTwo = categories.slice(0, 2).map(cat => cat.title).join(', ');
+            const remaining = categories.length - 2;
+            headerText = `🍣 ${firstTwo} +еще ${remaining}`;
+        }
+        
         const productListData = {
             messaging_product: "whatsapp",
             to: to,
@@ -1532,7 +1548,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 type: "product_list",
                 header: {
                     type: "text",
-                    text: totalGroups > 1 ? `🍣 Yaposhkin Rolls (${groupNumber}/${totalGroups})` : "🍣 Yaposhkin Rolls"
+                    text: headerText
                 },
                 body: {
                     text: "Выберите категорию и блюда:"
@@ -1548,8 +1564,9 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         };
         
         console.log(`📤 Отправляем product_list с ${sections.length} секциями и ${totalProducts} товарами`);
-        // console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items.length})`).join(', ')}`);
-                // Детальный вывод товаров по секциям
+        console.log(`📋 Заголовок: ${headerText}`);
+        
+        // Детальный вывод товаров по секциям
         sections.forEach(section => {
             console.log(`  📦 ${section.title}: ${section.product_items.length} товаров`);
             console.log(`    🆔 IDs: ${section.product_items.map(item => item.product_retailer_id).join(', ')}`);
