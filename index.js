@@ -1498,21 +1498,17 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         // Формируем умный заголовок
         let headerText;
         if (categories.length === 1) {
-            // Одна категория
             headerText = `🍣 ${categories[0].title}`;
         } else if (categories.length === 2) {
-            // Две категории
             headerText = `🍣 ${categories[0].title} и ${categories[1].title}`;
         } else if (categories.length === 3) {
-            // Три категории
             headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
         } else {
-            // Много категорий - показываем первые две и количество остальных
             const remaining = categories.length - 2;
             headerText = `🍣 ${categories[0].title}, ${categories[1].title} +${remaining} категорий`;
         }
         
-        // Ограничиваем длину заголовка (WhatsApp имеет лимиты)
+        // Ограничиваем длину заголовка
         if (headerText.length > 60) {
             headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
@@ -1524,11 +1520,46 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
             interactive: {
                 type: "product_list",
                 header: {
+                    type: "image", // Изменяем на изображение
+                    image: {
+                        link: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop&crop=center" // Красивые суши
+                    }
+                },
+                body: {
+                    text: `${headerText}\n\nВыберите блюда:`
+                },
+                footer: {
+                    text: "Yaposhkin Rolls • Свежие роллы с доставкой"
+                },
+                action: {
+                    catalog_id: catalogId,
+                    sections: sections
+                }
+            }
+        };
+        
+        console.log(`📤 Отправляем product_list с изображением в заголовке`);
+        console.log(`   🖼️ Header image: изображение`);
+        console.log(`   📦 Секций: ${sections.length}`);
+        console.log(`   🛍️ Товаров: ${totalProducts}`);
+        
+        await sendWhatsAppMessage(phone_no_id, productListData);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки product_list с изображением:", error);
+        
+        // Fallback без изображения
+        const productListDataFallback = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "product_list",
+                header: {
                     type: "text",
                     text: headerText
                 },
                 body: {
-                    // text: `${totalProducts} товаров\nВыберите блюда:`
                     text: `Выберите блюда:`
                 },
                 footer: {
@@ -1541,25 +1572,139 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
             }
         };
         
-        console.log(`📤 Отправляем product_list:`);
-        console.log(`   📋 Заголовок: ${headerText}`);
-        console.log(`   📦 Секций: ${sections.length}`);
-        console.log(`   🛍️ Товаров: ${totalProducts}`);
+        await sendWhatsAppMessage(phone_no_id, productListDataFallback);
+    }
+}
+
+// Альтернативный способ - отправка изображения перед каталогом
+async function sendCatalogWithImage(phone_no_id, to) {
+    console.log("=== ОТПРАВКА КАТАЛОГА С ИЗОБРАЖЕНИЕМ ===");
+    
+    try {
+        // 1. Сначала отправляем красивое изображение с брендингом
+        const imageMessage = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "image",
+            image: {
+                link: "https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&h=600&fit=crop&crop=center", // Красивая презентация суши
+                caption: "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСвежие роллы, приготовленные с любовью ❤️\nДоставка 30-40 минут по Бишкеку"
+            }
+        };
         
-        // Детальный вывод товаров по секциям
-        sections.forEach(section => {
-            console.log(`     📦 ${section.title}: ${section.product_items.length} товаров`);
-        });
+        await sendWhatsAppMessage(phone_no_id, imageMessage);
+        
+        // Небольшая пауза для лучшего UX
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // 2. Затем отправляем каталог как обычно
+        await sendCatalog(phone_no_id, to);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки каталога с изображением:", error);
+        // Fallback - отправляем обычный каталог
+        await sendCatalog(phone_no_id, to);
+    }
+}
+
+// Функция для отправки отдельных категорий с изображениями
+async function sendCategoryWithImage(phone_no_id, to, categoryName, productIds, categoryImage) {
+    try {
+        // 1. Отправляем изображение категории
+        const imageMessage = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "image",
+            image: {
+                link: categoryImage,
+                caption: `🍣 ${categoryName}\n\n${productIds.length} вкусных вариантов ждут вас!`
+            }
+        };
+        
+        await sendWhatsAppMessage(phone_no_id, imageMessage);
+        
+        // 2. Затем отправляем product_list для этой категории
+        const productListData = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "product_list",
+                header: {
+                    type: "text",
+                    text: `🍣 ${categoryName}`
+                },
+                body: {
+                    text: "Выберите понравившиеся блюда:"
+                },
+                footer: {
+                    text: "Yaposhkin Rolls"
+                },
+                action: {
+                    catalog_id: process.env.CATALOG_ID,
+                    sections: [{
+                        title: categoryName,
+                        product_items: productIds.map(id => ({
+                            product_retailer_id: id
+                        }))
+                    }]
+                }
+            }
+        };
         
         await sendWhatsAppMessage(phone_no_id, productListData);
         
     } catch (error) {
-        console.error("❌ Ошибка отправки product_list с секциями:", error);
+        console.error(`❌ Ошибка отправки категории ${categoryName} с изображением:`, error);
+    }
+}
+
+// Изображения категорий из интернета
+const categoryImages = {
+    "Роллы": "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop&crop=center",
+    "Роллы (продолжение)": "https://images.unsplash.com/photo-1617196034796-73dfa7b1fd56?w=800&h=600&fit=crop&crop=center",
+    "Теплые роллы": "https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&h=600&fit=crop&crop=center",
+    "Роллы без риса": "https://images.unsplash.com/photo-1611599482309-20d18c8dd78b?w=800&h=600&fit=crop&crop=center",
+    "Круассаны": "https://images.unsplash.com/photo-1555507036-ab794f17c87e?w=800&h=600&fit=crop&crop=center",
+    "Сладкие роллы": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=800&h=600&fit=crop&crop=center",
+    "Классические роллы": "https://images.unsplash.com/photo-1563612116625-3012372fccce?w=800&h=600&fit=crop&crop=center",
+    "Темпура роллы": "https://images.unsplash.com/photo-1617196034181-d17e74ee1460?w=800&h=600&fit=crop&crop=center",
+    "Суши и гунканы": "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop&crop=center",
+    "Теплые сеты": "https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&h=600&fit=crop&crop=center",
+    "Сеты": "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop&crop=center",
+    "Салаты": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&h=600&fit=crop&crop=center",
+    "Напитки": "https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&h=600&fit=crop&crop=center",
+    "Дополнительно": "https://images.unsplash.com/photo-1606787366850-de6330128bfc?w=800&h=600&fit=crop&crop=center"
+};
+
+// Функция отправки каталога по категориям с изображениями
+async function sendCatalogByCategories(phone_no_id, to) {
+    console.log("=== ОТПРАВКА КАТАЛОГА ПО КАТЕГОРИЯМ С ИЗОБРАЖЕНИЯМИ ===");
+    
+    try {
+        // Приветственное сообщение
+        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас покажу вам наши категории с фотографиями!";
+        await sendMessage(phone_no_id, to, welcomeText);
         
-        // Если не получилось отправить product_list, отправляем обычное сообщение
-        const categoryNames = categories.map(cat => cat.title).join(', ');
-        const fallbackText = `📱 Категории: ${categoryNames}\n\nПосмотрите наш каталог, выбрав меню в чате.`;
-        await sendMessage(phone_no_id, to, fallbackText);
+        // Отправляем каждую категорию с изображением
+        for (const [categoryName, imageUrl] of Object.entries(categoryImages)) {
+            // Находим продукты для этой категории из ваших данных
+            const categoryData = optimizedMenuGroups.flat().find(cat => cat.title === categoryName);
+            
+            if (categoryData) {
+                await sendCategoryWithImage(phone_no_id, to, categoryName, categoryData.productIds, imageUrl);
+                
+                // Пауза между категориями
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+        
+        // Финальное сообщение
+        const finalText = "Выберите любые понравившиеся блюда из категорий выше! 🍣";
+        await sendMessage(phone_no_id, to, finalText);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки каталога по категориям:", error);
     }
 }
 
