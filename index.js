@@ -1595,7 +1595,7 @@ async function sendCatalogWithImage(phone_no_id, to) {
         await sendWhatsAppMessage(phone_no_id, imageMessage);
         
         // Небольшая пауза для лучшего UX
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // await new Promise(resolve => setTimeout(resolve, 1500));
         
         // 2. Затем отправляем каталог как обычно
         await sendCatalog(phone_no_id, to);
@@ -1695,7 +1695,7 @@ async function sendCatalogByCategories(phone_no_id, to) {
                 await sendCategoryWithImage(phone_no_id, to, categoryName, categoryData.productIds, imageUrl);
                 
                 // Пауза между категориями
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
         
