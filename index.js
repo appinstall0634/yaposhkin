@@ -1548,8 +1548,12 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         };
         
         console.log(`📤 Отправляем product_list с ${sections.length} секциями и ${totalProducts} товарами`);
-        console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items.length})`).join(', ')}`);
-                console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items})`).join(', ')}`);
+        // console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items.length})`).join(', ')}`);
+                // Детальный вывод товаров по секциям
+        sections.forEach(section => {
+            console.log(`  📦 ${section.title}: ${section.product_items.length} товаров`);
+            console.log(`    🆔 IDs: ${section.product_items.map(item => item.product_retailer_id).join(', ')}`);
+        });
         
         await sendWhatsAppMessage(phone_no_id, productListData);
         
