@@ -1368,7 +1368,7 @@ const optimizedMenuGroups = [
         },
         {
             title: "Теплые сеты",
-            productIds: ["6", "3", "4", "1", "2", "5", "126", "120", "115"]
+            productIds: ["6", "3", "4", "1", "2", "5"]
         }
     ],
     
@@ -1379,7 +1379,7 @@ const optimizedMenuGroups = [
             productIds: [
                 "109", "117", "123", "111", "112", "105", "103", "113", "118", 
                 "106", "119", "124", "121", "108", "110", "116", "125", "114", 
-                "104", "107", "122"
+                "104", "107", "122", "126", "120", "115"
             ]
         }
     ],
@@ -1528,7 +1528,8 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                     text: headerText
                 },
                 body: {
-                    text: `${totalProducts} товаров\nВыберите блюда:`
+                    // text: `${totalProducts} товаров\nВыберите блюда:`
+                    text: `Выберите блюда:`
                 },
                 footer: {
                     text: "Yaposhkin Rolls"
