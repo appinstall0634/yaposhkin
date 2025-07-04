@@ -1449,7 +1449,7 @@ async function sendCatalog(phone_no_id, to) {
         
         // Отправляем финальное сообщение
         await new Promise(resolve => setTimeout(resolve, 2000));
-        const finalText = `✅ Это весь наш каталог!\n\n📊 Отправлено ${categoryGroups.length} сообщений вместо 12\n\nВыберите понравившиеся блюда из любой категории и добавьте в корзину. Доставка занимает 30-40 минут. 🚀`;
+        const finalText = `Выберите понравившиеся блюда из любой категории и добавьте в корзину.`;
         await sendMessage(phone_no_id, to, finalText);
         
         console.log("✅ Оптимизированный каталог отправлен полностью");
@@ -1514,7 +1514,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         
         // Ограничиваем длину заголовка (WhatsApp имеет лимиты)
         if (headerText.length > 60) {
-            headerText = `🍣 ${categories.length} категорий (${totalProducts} товаров)`;
+            headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
         
         const productListData = {
@@ -1528,10 +1528,10 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                     text: headerText
                 },
                 body: {
-                    text: `Группа ${groupNumber}/${totalGroups} • ${totalProducts} товаров\nВыберите категорию и блюда:`
+                    text: `${totalProducts} товаров\nВыберите блюда:`
                 },
                 footer: {
-                    text: "Доставка 30-40 минут"
+                    text: "Yaposhkin Rolls"
                 },
                 action: {
                     catalog_id: catalogId,
