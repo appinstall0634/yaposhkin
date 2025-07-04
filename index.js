@@ -267,10 +267,9 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         // Меняем состояние ожидания на ожидание заказа из каталога
         setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
         
-        // Отправляем каталог через 2 секунды
-        setTimeout(async () => {
+        
             await sendCatalog(phone_no_id, from);
-        }, 2000);
+     
         
     } catch (error) {
         console.error("❌ Ошибка обновления клиента:", error);
@@ -489,9 +488,8 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
             
             setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
             
-            setTimeout(async () => {
                 await sendCatalog(phone_no_id, from);
-            }, 1000);
+
         }
 
     } catch (error) {
@@ -562,9 +560,9 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
         
         // Отправляем каталог через 2 секунды
-        setTimeout(async () => {
+
             await sendCatalog(phone_no_id, from);
-        }, 2000);
+
         
     } catch (error) {
         console.error("❌ Ошибка регистрации без местоположения:", error);
@@ -627,9 +625,9 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
             
             // Отправляем каталог через 1 секунду
-            setTimeout(async () => {
+
                 await sendCatalog(phone_no_id, from);
-            }, 1000);
+
         }
         
     } catch (error) {
@@ -1306,90 +1304,179 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
 //     await sendWhatsAppMessage(phone_no_id, catalogData);
 // }
 
-// Данные меню с группировкой
-const menuData = [
-    // Сообщение 1: Основные роллы (30 позиций)
+// Данные меню с группировкой по категориям
+const menuCategories = [
     {
-        title: "🍣 Основные роллы",
-        description: "Наша классическая коллекция роллов",
+        title: "Роллы",
         productIds: [
-            "126", "120", "115", "109", "117", "123", "111", "112", "105", "103",
-            "113", "118", "106", "119", "124", "121", "108", "110", "116", "125",
-            "114", "104", "107", "122", "71", "46", "54", "58", "63", "62"
+            "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
+            "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
+            "57", "64", "56", "59", "66", "65", "55", "38", "36", "37", 
+            "41", "35", "42", "44", "45", "43", "40", "39", "34"
         ]
     },
-    // Сообщение 2: Специальные роллы (30 позиций)
     {
-        title: "🔥 Специальные роллы",
-        description: "Теплые, темпура и особенные роллы",
+        title: "Теплые роллы",
         productIds: [
-            "60", "61", "49", "48", "47", "50", "53", "72", "67", "70",
-            "68", "69", "52", "51", "57", "64", "56", "59", "66", "65",
-            "55", "38", "36", "37", "41", "35", "42", "44", "45", "43"
+            "24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"
         ]
     },
-    // Сообщение 3: Теплые роллы и темпура (30 позиций)
     {
-        title: "🌟 Теплые роллы и темпура",
-        description: "Запеченные роллы и темпура",
+        title: "Роллы без риса",
         productIds: [
-            "40", "39", "34", "24", "26", "33", "28", "25", "27", "29",
-            "30", "23", "31", "32", "19", "17", "15", "21", "20", "18",
-            "16", "22", "134", "135", "136", "85", "86", "81", "82", "91"
+            "136", "134", "135"
         ]
     },
-    // Сообщение 4: Суши и сеты (30 позиций)
     {
-        title: "🍤 Суши и сеты",
-        description: "Суши, гунканы и готовые сеты",
+        title: "Круассаны",
         productIds: [
-            "78", "84", "80", "79", "83", "77", "75", "73", "76", "74",
-            "89", "88", "87", "90", "6", "3", "4", "1", "2", "5",
-            "150", "139", "137", "138", "131", "130", "127", "133", "129", "128"
+            "93", "94", "92"
         ]
     },
-    // Сообщение 5: Дополнительно и напитки (26 позиций)
     {
-        title: "🥗 Дополнительно и напитки",
-        description: "Салаты, круассаны, напитки и соусы",
+        title: "Суши и гунканы",
         productIds: [
-            "132", "98", "96", "95", "97", "99", "102", "101", "100", "93",
-            "94", "92", "13", "9", "8", "10", "12", "14", "7", "11",
-            "142", "141", "144", "140", "143", "147"
+            "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
+            "77", "75", "73", "76", "74", "89", "88", "87", "90"
         ]
     },
-    // Сообщение 6: Оставшиеся позиции (4 позиции)
     {
-        title: "🍯 Соусы и специи",
-        description: "Дополнительные соусы",
+        title: "Темпура роллы",
         productIds: [
-            "148", "149", "146", "145"
+            "19", "17", "15", "21", "20", "18", "16", "22"
+        ]
+    },
+    {
+        title: "Классические роллы",
+        productIds: [
+            "131", "130", "127", "133", "129", "128", "132"
+        ]
+    },
+    {
+        title: "Сладкие роллы",
+        productIds: [
+            "150", "139", "137", "138"
+        ]
+    },
+    {
+        title: "Салаты",
+        productIds: [
+            "98", "96", "95", "97", "99", "102", "101", "100"
+        ]
+    },
+    {
+        title: "Теплые сеты",
+        productIds: [
+            "6", "3", "4", "1", "2", "5", "126", "120", "115"
+        ]
+    },
+    {
+        title: "Сеты",
+        productIds: [
+            "109", "117", "123", "111", "112", "105", "103", "113", "118", 
+            "106", "119", "124", "121", "108", "110", "116", "125", "114", 
+            "104", "107", "122"
+        ]
+    },
+    {
+        title: "Дополнительно",
+        productIds: [
+            "142", "141", "144", "140", "143", "147", "148", "149", "146", "145"
+        ]
+    },
+    {
+        title: "Напитки",
+        productIds: [
+            "13", "9", "8", "10", "12", "14", "7", "11"
         ]
     }
 ];
 
+// Функция разделения категорий на группы до 30 товаров
+function splitCategoriesIntoGroups(categories, maxProductsPerGroup = 30) {
+    const groups = [];
+    let currentGroup = [];
+    let currentProductCount = 0;
+    
+    for (const category of categories) {
+        // Если добавление этой категории превысит лимит, создаем новую группу
+        if (currentProductCount + category.productIds.length > maxProductsPerGroup && currentGroup.length > 0) {
+            groups.push([...currentGroup]);
+            currentGroup = [];
+            currentProductCount = 0;
+        }
+        
+        // Если одна категория больше лимита, разделяем её
+        if (category.productIds.length > maxProductsPerGroup) {
+            const chunks = [];
+            for (let i = 0; i < category.productIds.length; i += maxProductsPerGroup) {
+                chunks.push({
+                    title: `${category.title} (часть ${Math.floor(i / maxProductsPerGroup) + 1})`,
+                    productIds: category.productIds.slice(i, i + maxProductsPerGroup)
+                });
+            }
+            
+            // Добавляем части как отдельные группы
+            for (const chunk of chunks) {
+                if (currentGroup.length > 0) {
+                    groups.push([...currentGroup]);
+                    currentGroup = [];
+                    currentProductCount = 0;
+                }
+                groups.push([chunk]);
+            }
+        } else {
+            currentGroup.push(category);
+            currentProductCount += category.productIds.length;
+        }
+    }
+    
+    // Добавляем последнюю группу если есть
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+    }
+    
+    return groups;
+}
+
 // Обновленная функция отправки каталога
 async function sendCatalog(phone_no_id, to) {
-    console.log("=== ОТПРАВКА КАТАЛОГА ПО ЧАСТЯМ ===");
+    console.log("=== ОТПРАВКА КАТАЛОГА ПО КАТЕГОРИЯМ ===");
     
     try {
+        // Получаем CATALOG_ID из переменных окружения
+        const catalogId = process.env.CATALOG_ID;
+        if (!catalogId) {
+            console.error("❌ CATALOG_ID не найден в переменных окружения");
+            throw new Error("CATALOG_ID не настроен");
+        }
+        
         // Отправляем приветственное сообщение
-        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог по категориям. Выберите понравившиеся блюда и добавьте в корзину! ❤️";
+        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог по категориям. Выберите понравившиеся блюда! ❤️";
         await sendMessage(phone_no_id, to, welcomeText);
         
-        // Отправляем каждую категорию с задержкой
-        for (let i = 0; i < menuData.length; i++) {
-            const category = menuData[i];
+        // Разделяем категории на группы
+        const categoryGroups = splitCategoriesIntoGroups(menuCategories);
+        
+        console.log(`📊 Разделено на ${categoryGroups.length} групп:`);
+        categoryGroups.forEach((group, index) => {
+            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
+            console.log(`  Группа ${index + 1}: ${group.length} категорий, ${totalProducts} товаров`);
+        });
+        
+        // Отправляем каждую группу как отдельный product_list
+        for (let i = 0; i < categoryGroups.length; i++) {
+            const group = categoryGroups[i];
             
             // Задержка между отправками (2 секунды)
             if (i > 0) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
             
-            console.log(`📤 Отправляем категорию ${i + 1}/${menuData.length}: ${category.title}`);
-            console.log(`📦 Товары: ${category.productIds.length} шт.`);
+            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
+            console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
-            await sendProductList(phone_no_id, to, category.title, category.description, category.productIds);
+            await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
         }
         
         // Отправляем финальное сообщение
@@ -1426,11 +1513,19 @@ async function sendCatalog(phone_no_id, to) {
     }
 }
 
-// Функция отправки списка товаров (multi product message)
-async function sendProductList(phone_no_id, to, title, description, productIds) {
+// Функция отправки product_list с секциями (категориями)
+async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
     try {
-        // Ограничиваем до 30 товаров (лимит WhatsApp)
-        const limitedProductIds = productIds.slice(0, 30);
+        // Формируем секции для WhatsApp
+        const sections = categories.map(category => ({
+            title: category.title,
+            product_items: category.productIds.map(id => ({
+                product_retailer_id: id
+            }))
+        }));
+        
+        // Подсчитываем общее количество товаров
+        const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
         
         const productListData = {
             messaging_product: "whatsapp",
@@ -1440,37 +1535,32 @@ async function sendProductList(phone_no_id, to, title, description, productIds) 
                 type: "product_list",
                 header: {
                     type: "text",
-                    text: title
+                    text: totalGroups > 1 ? `🍣 Yaposhkin Rolls (${groupNumber}/${totalGroups})` : "🍣 Yaposhkin Rolls"
                 },
                 body: {
-                    text: description
+                    text: "Выберите категорию и блюда:"
                 },
                 footer: {
-                    text: "Нажмите для выбора товаров"
+                    text: "Доставка 30-40 минут"
                 },
                 action: {
-                    catalog_id: process.env.CATALOG_ID, // ID каталога из переменных окружения
-                    sections: [
-                        {
-                            title: "Выберите блюда",
-                            product_items: limitedProductIds.map(id => ({
-                                product_retailer_id: id
-                            }))
-                        }
-                    ]
+                    catalog_id: catalogId,
+                    sections: sections
                 }
             }
         };
         
-        console.log(`📤 Отправляем product_list с ${limitedProductIds.length} товарами`);
+        console.log(`📤 Отправляем product_list с ${sections.length} секциями и ${totalProducts} товарами`);
+        console.log(`📋 Секции: ${sections.map(s => `${s.title} (${s.product_items.length})`).join(', ')}`);
         
         await sendWhatsAppMessage(phone_no_id, productListData);
         
     } catch (error) {
-        console.error("❌ Ошибка отправки product_list:", error);
+        console.error("❌ Ошибка отправки product_list с секциями:", error);
         
         // Если не получилось отправить product_list, отправляем обычное сообщение
-        const fallbackText = `${title}\n\n${description}\n\n📱 Посмотрите наш каталог, выбрав меню в чате.`;
+        const categoryNames = categories.map(cat => cat.title).join(', ');
+        const fallbackText = `📱 Категории: ${categoryNames}\n\nПосмотрите наш каталог, выбрав меню в чате.`;
         await sendMessage(phone_no_id, to, fallbackText);
     }
 }
