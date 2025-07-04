@@ -1392,48 +1392,77 @@ const menuCategories = [
     }
 ];
 
-// Функция разделения категорий на группы до 30 товаров
-function splitCategoriesIntoGroups(categories, maxProductsPerGroup = 30) {
+// Функция умной группировки категорий для минимизации сообщений
+function optimizeProductGroups(categories, maxProductsPerGroup = 30) {
     const groups = [];
     let currentGroup = [];
     let currentProductCount = 0;
     
-    for (const category of categories) {
-        // Если добавление этой категории превысит лимит, создаем новую группу
-        if (currentProductCount + category.productIds.length > maxProductsPerGroup && currentGroup.length > 0) {
-            groups.push([...currentGroup]);
-            currentGroup = [];
-            currentProductCount = 0;
-        }
+    // Сортируем категории по количеству товаров (сначала большие)
+    const sortedCategories = [...categories].sort((a, b) => b.productIds.length - a.productIds.length);
+    
+    console.log("📊 Категории отсортированы по размеру:");
+    sortedCategories.forEach(cat => {
+        console.log(`  ${cat.title}: ${cat.productIds.length} товаров`);
+    });
+    
+    for (const category of sortedCategories) {
+        const categorySize = category.productIds.length;
         
-        // Если одна категория больше лимита, разделяем её
-        if (category.productIds.length > maxProductsPerGroup) {
+        // Если категория слишком большая для одной группы, разделяем её
+        if (categorySize > maxProductsPerGroup) {
+            // Сначала завершаем текущую группу если есть
+            if (currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+                currentProductCount = 0;
+            }
+            
+            // Разделяем большую категорию на части
             const chunks = [];
-            for (let i = 0; i < category.productIds.length; i += maxProductsPerGroup) {
+            for (let i = 0; i < categorySize; i += maxProductsPerGroup) {
+                const chunkProducts = category.productIds.slice(i, i + maxProductsPerGroup);
+                const partNumber = Math.floor(i / maxProductsPerGroup) + 1;
+                const totalParts = Math.ceil(categorySize / maxProductsPerGroup);
+                
                 chunks.push({
-                    title: `${category.title} (часть ${Math.floor(i / maxProductsPerGroup) + 1})`,
-                    productIds: category.productIds.slice(i, i + maxProductsPerGroup)
+                    title: totalParts > 1 ? `${category.title} (${partNumber}/${totalParts})` : category.title,
+                    productIds: chunkProducts
                 });
             }
             
-            // Добавляем части как отдельные группы
-            for (const chunk of chunks) {
-                if (currentGroup.length > 0) {
-                    groups.push([...currentGroup]);
-                    currentGroup = [];
-                    currentProductCount = 0;
-                }
+            // Добавляем каждую часть как отдельную группу
+            chunks.forEach(chunk => {
                 groups.push([chunk]);
-            }
-        } else {
+            });
+            
+            continue;
+        }
+        
+        // Проверяем, поместится ли категория в текущую группу
+        if (currentProductCount + categorySize <= maxProductsPerGroup) {
+            // Помещается - добавляем в текущую группу
             currentGroup.push(category);
-            currentProductCount += category.productIds.length;
+            currentProductCount += categorySize;
+            console.log(`  ✅ Добавили "${category.title}" в текущую группу (${currentProductCount}/${maxProductsPerGroup})`);
+        } else {
+            // Не помещается - завершаем текущую группу и начинаем новую
+            if (currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                console.log(`  📦 Завершили группу с ${currentProductCount} товарами`);
+            }
+            
+            // Начинаем новую группу с этой категорией
+            currentGroup = [category];
+            currentProductCount = categorySize;
+            console.log(`  🆕 Начали новую группу с "${category.title}" (${currentProductCount}/${maxProductsPerGroup})`);
         }
     }
     
     // Добавляем последнюю группу если есть
     if (currentGroup.length > 0) {
         groups.push(currentGroup);
+        console.log(`  📦 Завершили последнюю группу с ${currentProductCount} товарами`);
     }
     
     return groups;
@@ -1441,7 +1470,7 @@ function splitCategoriesIntoGroups(categories, maxProductsPerGroup = 30) {
 
 // Обновленная функция отправки каталога
 async function sendCatalog(phone_no_id, to) {
-    console.log("=== ОТПРАВКА КАТАЛОГА ПО КАТЕГОРИЯМ ===");
+    console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
     
     try {
         // Получаем CATALOG_ID из переменных окружения
@@ -1452,17 +1481,29 @@ async function sendCatalog(phone_no_id, to) {
         }
         
         // Отправляем приветственное сообщение
-        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог по категориям. Выберите понравившиеся блюда! ❤️";
+        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
         await sendMessage(phone_no_id, to, welcomeText);
         
-        // Разделяем категории на группы
-        const categoryGroups = splitCategoriesIntoGroups(menuCategories);
+        // Оптимизируем группировку категорий
+        const categoryGroups = optimizeProductGroups(menuCategories, 30);
         
-        console.log(`📊 Разделено на ${categoryGroups.length} групп:`);
+        console.log(`📊 Оптимизированная группировка:`);
+        console.log(`   Исходно: ${menuCategories.length} категорий`);
+        console.log(`   Результат: ${categoryGroups.length} групп`);
+        
         categoryGroups.forEach((group, index) => {
             const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
-            console.log(`  Группа ${index + 1}: ${group.length} категорий, ${totalProducts} товаров`);
+            const categoryNames = group.map(cat => cat.title).join(', ');
+            console.log(`   Группа ${index + 1}: ${group.length} категорий, ${totalProducts} товаров`);
+            console.log(`     Категории: ${categoryNames}`);
         });
+        
+        // Рассчитываем экономию сообщений
+        const originalMessages = menuCategories.length; // Если бы отправляли по одной категории
+        const optimizedMessages = categoryGroups.length;
+        const savedMessages = originalMessages - optimizedMessages;
+        
+        console.log(`💰 Экономия: ${savedMessages} сообщений (было бы ${originalMessages}, стало ${optimizedMessages})`);
         
         // Отправляем каждую группу как отдельный product_list
         for (let i = 0; i < categoryGroups.length; i++) {
@@ -1472,14 +1513,19 @@ async function sendCatalog(phone_no_id, to) {
             console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
             await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
+            
+            // Небольшая задержка между сообщениями для лучшего UX
+            if (i < categoryGroups.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
         
         // Отправляем финальное сообщение
-        // await new Promise(resolve => setTimeout(resolve, 2000));
-        const finalText = "✅ Это весь наш каталог!\n\nВыберите понравившиеся блюда из любой категории и добавьте в корзину. Доставка занимает 30-40 минут. 🚀";
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const finalText = `✅ Это весь наш каталог!\n\n📊 Отправлено ${categoryGroups.length} сообщений вместо ${menuCategories.length}\n\nВыберите понравившиеся блюда из любой категории и добавьте в корзину. Доставка занимает 30-40 минут. 🚀`;
         await sendMessage(phone_no_id, to, finalText);
         
-        console.log("✅ Каталог отправлен полностью");
+        console.log("✅ Оптимизированный каталог отправлен полностью");
         
     } catch (error) {
         console.error("❌ Ошибка отправки каталога:", error);
@@ -1508,7 +1554,7 @@ async function sendCatalog(phone_no_id, to) {
     }
 }
 
-// Функция отправки product_list с секциями (категориями)
+// Обновленная функция отправки product_list с улучшенным заголовком
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
     try {
         // Формируем секции для WhatsApp
@@ -1518,26 +1564,30 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 product_retailer_id: id
             }))
         }));
-
-        console.log(`section is ${sections}`);
         
         // Подсчитываем общее количество товаров
         const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
         
-        // Формируем заголовок с названиями категорий
+        // Формируем умный заголовок
         let headerText;
         if (categories.length === 1) {
-            // Если только одна категория
+            // Одна категория
             headerText = `🍣 ${categories[0].title}`;
-        } else if (categories.length <= 3) {
-            // Если 2-3 категории, перечисляем их
-            const categoryNames = categories.map(cat => cat.title).join(', ');
-            headerText = `🍣 ${categoryNames}`;
+        } else if (categories.length === 2) {
+            // Две категории
+            headerText = `🍣 ${categories[0].title} и ${categories[1].title}`;
+        } else if (categories.length === 3) {
+            // Три категории
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
         } else {
-            // Если много категорий, показываем первые 2 и "+еще X"
-            const firstTwo = categories.slice(0, 2).map(cat => cat.title).join(', ');
+            // Много категорий - показываем первые две и количество остальных
             const remaining = categories.length - 2;
-            headerText = `🍣 ${firstTwo} +еще ${remaining}`;
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title} +${remaining} категорий`;
+        }
+        
+        // Ограничиваем длину заголовка (WhatsApp имеет лимиты)
+        if (headerText.length > 60) {
+            headerText = `🍣 ${categories.length} категорий (${totalProducts} товаров)`;
         }
         
         const productListData = {
@@ -1551,7 +1601,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                     text: headerText
                 },
                 body: {
-                    text: "Выберите категорию и блюда:"
+                    text: `Группа ${groupNumber}/${totalGroups} • ${totalProducts} товаров\nВыберите категорию и блюда:`
                 },
                 footer: {
                     text: "Доставка 30-40 минут"
@@ -1563,13 +1613,14 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
             }
         };
         
-        console.log(`📤 Отправляем product_list с ${sections.length} секциями и ${totalProducts} товарами`);
-        console.log(`📋 Заголовок: ${headerText}`);
+        console.log(`📤 Отправляем product_list:`);
+        console.log(`   📋 Заголовок: ${headerText}`);
+        console.log(`   📦 Секций: ${sections.length}`);
+        console.log(`   🛍️ Товаров: ${totalProducts}`);
         
         // Детальный вывод товаров по секциям
         sections.forEach(section => {
-            console.log(`  📦 ${section.title}: ${section.product_items.length} товаров`);
-            console.log(`    🆔 IDs: ${section.product_items.map(item => item.product_retailer_id).join(', ')}`);
+            console.log(`     📦 ${section.title}: ${section.product_items.length} товаров`);
         });
         
         await sendWhatsAppMessage(phone_no_id, productListData);
