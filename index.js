@@ -21,16 +21,101 @@ const ORDER_FLOW_ID = '708820881926236'; // order
 // Состояния пользователей для отслеживания процесса
 const userStates = new Map();
 
-// Добавляем новый Map для отслеживания состояния ожидания
-const userWaitingStates = new Map();
 
-// Возможные состояния ожидания
-const WAITING_STATES = {
-    NONE: 'none',                    // Принимаем любые сообщения
-    FLOW_RESPONSE: 'flow_response',  // Ожидаем ответ от Flow
-    LOCATION: 'location',            // Ожидаем местоположение
-    CATALOG_ORDER: 'catalog_order'   // Ожидаем ответ от каталога
-};
+const optimizedMenuGroups = [
+    // Группа 1: Роллы (первые 30)
+    [
+        {
+            title: "Роллы",
+            productIds: [
+                "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
+                "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
+                "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
+            ]
+        }
+    ],
+    
+    // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
+    [
+        {
+            title: "Роллы (продолжение)",
+            productIds: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
+        },
+        {
+            title: "Теплые роллы",
+            productIds: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
+        },
+        {
+            title: "Роллы без риса",
+            productIds: ["136", "134", "135"]
+        },
+        {
+            title: "Круассаны",
+            productIds: ["93", "94", "92"]
+        },
+        {
+            title: "Сладкие роллы",
+            productIds: ["150", "139", "137", "138"]
+        }
+    ],
+    
+    // Группа 3: Классические роллы + Темпура роллы (15 товаров)
+    [
+        {
+            title: "Классические роллы",
+            productIds: ["131", "130", "127", "133", "129", "128", "132"]
+        },
+        {
+            title: "Темпура роллы",
+            productIds: ["19", "17", "15", "21", "20", "18", "16", "22"]
+        }
+    ],
+    
+    // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
+    [
+        {
+            title: "Суши и гунканы",
+            productIds: [
+                "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
+                "77", "75", "73", "76", "74", "89", "88", "87", "90"
+            ]
+        },
+        {
+            title: "Теплые сеты",
+            productIds: ["6", "3", "4", "1", "2", "5"]
+        }
+    ],
+    
+    // Группа 5: Сеты (24 товара)
+    [
+        {
+            title: "Сеты",
+            productIds: [
+                "109", "117", "123", "111", "112", "105", "103", "113", "118", 
+                "106", "119", "124", "121", "108", "110", "116", "125", "114", 
+                "104", "107", "122", "126", "120", "115"
+            ]
+        }
+    ],
+    
+    // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
+    [
+        {
+            title: "Салаты",
+            productIds: ["98", "96", "95", "97", "99", "102", "101", "100"]
+        },
+        {
+            title: "Напитки",
+            productIds: ["13", "9", "8", "10", "12", "14", "7", "11"]
+        },
+        {
+            title: "Дополнительно",
+            productIds: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
+        }
+    ]
+];
+
+
 
 app.listen(PORT, () => {
     console.log("webhook is listening");
@@ -74,73 +159,39 @@ app.post("/webhook", async (req, res) => {
             console.log("message type:", message.type);
             console.log("message:", JSON.stringify(message, null, 2));
 
-            // Проверяем текущее состояние ожидания пользователя
-            const currentWaitingState = userWaitingStates.get(from) || WAITING_STATES.NONE;
-            console.log(`👤 Текущее состояние ожидания для ${from}: ${currentWaitingState}`);
-
             try {
-                // Проверяем тип сообщения и состояние ожидания
+                // Проверяем тип сообщения
                 if (message.type === "location") {
-                    if (currentWaitingState === WAITING_STATES.LOCATION) {
-                        // Пользователь отправил местоположение когда мы его ждали
-                        console.log("📍 Обрабатываем ожидаемое местоположение");
-                        await handleLocationMessage(phone_no_id, from, message);
-                    } else {
-                        // Местоположение пришло неожиданно - игнорируем
-                        console.log("📍 Игнорируем неожиданное местоположение");
-                    }
+                    // Пользователь отправил местоположение
+                    console.log("📍 Обрабатываем местоположение");
+                    await handleLocationMessage(phone_no_id, from, message);
                 } else if (message.type === "interactive") {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
-                        if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
-                            // Ответ от Flow когда мы его ждали
-                            console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
-                            await handleFlowResponse(phone_no_id, from, message, body_param);
-                        } else {
-                            // Flow ответ пришел неожиданно - игнорируем
-                            console.log("🔄 Игнорируем неожиданный ответ от Flow");
-                        }
+                        // Ответ от Flow
+                        console.log("🔄 Обрабатываем ответ от Flow");
+                        await handleFlowResponse(phone_no_id, from, message, body_param);
                     } else if (message.interactive.type === "product_list_reply") {
-                        if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                            // Ответ от каталога когда мы его ждали
-                            console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
-                            await handleCatalogResponse(phone_no_id, from, message);
-                        } else {
-                            // Ответ от каталога пришел неожиданно - игнорируем
-                            console.log("🛒 Игнорируем неожиданный ответ от каталога");
-                        }
+                        // Ответ от каталога - обрабатываем заказ
+                        console.log("🛒 Обрабатываем ответ от каталога (product_list)");
+                        await handleCatalogResponse(phone_no_id, from, message);
                     } else if (message.interactive.type === "button_reply") {
-                        // Ответ от кнопки - обрабатываем всегда
+                        // Ответ от кнопки
                         console.log("🔘 Обрабатываем ответ от кнопки");
                         await handleButtonResponse(phone_no_id, from, message);
                     } else {
                         console.log("❓ Неизвестный тип interactive сообщения:", message.interactive.type);
-                        if (currentWaitingState === WAITING_STATES.NONE) {
-                            await handleIncomingMessage(phone_no_id, from, message);
-                        } else {
-                            console.log("⏳ Игнорируем сообщение - ожидаем другой тип ответа");
-                        }
+                        await handleIncomingMessage(phone_no_id, from, message);
                     }
                 } else if (message.type === "order") {
-                    if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                        // Ответ от каталога в формате order когда мы его ждали
-                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
-                        await handleCatalogOrderResponse(phone_no_id, from, message);
-                    } else {
-                        // Order пришел неожиданно - игнорируем
-                        console.log("🛒 Игнорируем неожиданный order ответ");
-                    }
+                    // Ответ от каталога в формате order
+                    console.log("🛒 Обрабатываем ответ от каталога (order)");
+                    await handleCatalogOrderResponse(phone_no_id, from, message);
                 } else {
-                    // Любое другое сообщение
-                    if (currentWaitingState === WAITING_STATES.NONE) {
-                        // Принимаем обычные сообщения только если не ждем специфичного ответа
-                        console.log("📝 Обрабатываем обычное сообщение");
-                        await handleIncomingMessage(phone_no_id, from, message);
-                    } else {
-                        // Игнорируем обычные сообщения если ждем специфичного ответа
-                        console.log(`⏳ Игнорируем текстовое сообщение - ожидаем ${currentWaitingState}`);
-                    }
+                    // Любое другое сообщение - проверяем клиента и отправляем Flow
+                    console.log("📝 Обрабатываем обычное сообщение");
+                    await handleIncomingMessage(phone_no_id, from, message);
                 }
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
@@ -152,21 +203,6 @@ app.post("/webhook", async (req, res) => {
         }
     }
 });
-
-// Функции для управления состояниями ожидания
-function setUserWaitingState(phone, state) {
-    console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${state}`);
-    userWaitingStates.set(phone, state);
-}
-
-function clearUserWaitingState(phone) {
-    console.log(`✅ Очищаем состояние ожидания для ${phone}`);
-    userWaitingStates.delete(phone);
-}
-
-function getUserWaitingState(phone) {
-    return userWaitingStates.get(phone) || WAITING_STATES.NONE;
-}
 
 // Обработка местоположения
 async function handleLocationMessage(phone_no_id, from, message) {
@@ -185,7 +221,6 @@ async function handleLocationMessage(phone_no_id, from, message) {
         if (!userState) {
             console.log("❌ Состояние пользователя не найдено");
             await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте заново оформить заказ.");
-            clearUserWaitingState(from);
             return;
         }
         
@@ -194,10 +229,12 @@ async function handleLocationMessage(phone_no_id, from, message) {
         // Обновляем клиента с новым адресом
         await updateCustomerWithLocation(phone_no_id, from, userState, longitude, latitude);
         
+        // Очищаем состояние
+        // userStates.delete(from);
+        
     } catch (error) {
         console.error("❌ Ошибка обработки местоположения:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при сохранении адреса. Попробуйте еще раз.");
-        clearUserWaitingState(from);
     }
 }
 
@@ -264,12 +301,10 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
             await sendMessage(phone_no_id, from, confirmText);
         }
         
-        // Меняем состояние ожидания на ожидание заказа из каталога
-        setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-        
-        
+        // Отправляем каталог через 2 секунды
+        setTimeout(async () => {
             await sendCatalog(phone_no_id, from);
-     
+        }, 2000);
         
     } catch (error) {
         console.error("❌ Ошибка обновления клиента:", error);
@@ -284,7 +319,6 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         await sendMessage(phone_no_id, from, errorMessage);
         // Очищаем состояние только при ошибке
         userStates.delete(from);
-        clearUserWaitingState(from);
     }
 }
 
@@ -337,9 +371,6 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
             await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
         }
 
-        // Устанавливаем состояние ожидания ответа от Flow
-        setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
-
     } catch (error) {
         console.error('❌ Ошибка проверки клиента:', error);
         
@@ -354,7 +385,6 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
             
             console.log('🆕 Ошибка API - отправляем регистрационный Flow');
             await sendNewCustomerFlow(phone_no_id, from, branches);
-            setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
         } catch (fallbackError) {
             console.error('❌ Критическая ошибка получения филиалов:', fallbackError);
             await sendMessage(phone_no_id, from, "Извините, временные технические проблемы. Попробуйте позже.");
@@ -434,7 +464,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                 text: "🛒 Оформление заказа"
             },
             body: {
-                text: `Привет, ${customer.first_name}!`
+                text: `Привет, ${customer.first_name}! Настройте детали заказа`
             },
             footer: {
                 text: "Выберите тип доставки и адрес"
@@ -445,7 +475,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
-                    flow_cta: "Заказать",
+                    flow_cta: "Настроить заказ",
                     flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
@@ -486,16 +516,14 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
             console.log("❓ Неизвестный тип Flow, отправляем каталог");
             await sendMessage(phone_no_id, from, "Спасибо! Выберите блюда из каталога:");
             
-            setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-            
+            setTimeout(async () => {
                 await sendCatalog(phone_no_id, from);
-
+            }, 1000);
         }
 
     } catch (error) {
         console.error("Ошибка обработки Flow ответа:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке формы. Попробуйте еще раз.");
-        clearUserWaitingState(from);
     }
 }
 
@@ -513,9 +541,6 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
                 delivery_address: data.delivery_address
             });
 
-            // Устанавливаем состояние ожидания местоположения
-            setUserWaitingState(from, WAITING_STATES.LOCATION);
-
             // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
         } else {
@@ -526,7 +551,6 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
     } catch (error) {
         console.error('❌ Ошибка регистрации:', error);
         await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при регистрации. Попробуйте позже.');
-        clearUserWaitingState(from);
     }
 }
 
@@ -556,18 +580,14 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         const confirmText = `Спасибо за регистрацию, ${data.customer_name}! 🎉\n\nВы выбрали самовывоз.\n\nТеперь выберите блюда из нашего каталога! 🍣`;
         await sendMessage(phone_no_id, from, confirmText);
         
-        // Устанавливаем состояние ожидания заказа из каталога
-        setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-        
         // Отправляем каталог через 2 секунды
-
+        setTimeout(async () => {
             await sendCatalog(phone_no_id, from);
-
+        }, 2000);
         
     } catch (error) {
         console.error("❌ Ошибка регистрации без местоположения:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при регистрации. Попробуйте еще раз.");
-        clearUserWaitingState(from);
     }
 }
 
@@ -602,9 +622,6 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
                 branch: data.branch
             });
             
-            // Устанавливаем состояние ожидания местоположения
-            setUserWaitingState(from, WAITING_STATES.LOCATION);
-            
             // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
             
@@ -621,19 +638,15 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             
             await sendMessage(phone_no_id, from, confirmText);
             
-            // Устанавливаем состояние ожидания заказа из каталога
-            setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-            
             // Отправляем каталог через 1 секунду
-
+            setTimeout(async () => {
                 await sendCatalog(phone_no_id, from);
-
+            }, 1000);
         }
         
     } catch (error) {
         console.error('❌ Ошибка обработки заказа:', error);
         await sendMessage(phone_no_id, from, 'Извините, произошла ошибка. Попробуйте еще раз.');
-        clearUserWaitingState(from);
     }
 }
 
@@ -707,10 +720,10 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
     } catch (error) {
         console.error("Ошибка обработки order ответа каталога:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке заказа. Попробуйте еще раз.");
-        clearUserWaitingState(from);
     }
 }
 
+// Расчет доставки и оформление заказа
 // Расчет доставки и оформление заказа
 async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, userState) {
     try {
@@ -790,7 +803,6 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 console.log("❌ Нет координат адреса для доставки");
                 await sendMessage(phone_no_id, from, "❌ Ошибка: не удается определить координаты адреса доставки. Попробуйте указать адрес заново или обратитесь к менеджеру.");
                 userStates.delete(from);
-                clearUserWaitingState(from);
                 return;
             }
             
@@ -816,14 +828,12 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     console.log("❌ Доставка недоступна по указанному адресу");
                     await sendMessage(phone_no_id, from, "❌ К сожалению, доставка по этому адресу недоступна. Попробуйте указать другой адрес или обратитесь к менеджеру.");
                     userStates.delete(from);
-                    clearUserWaitingState(from);
                     return; 
                 }
             } catch (deliveryError) {
                 console.error("❌ Ошибка запроса доставки:", deliveryError);
                 await sendMessage(phone_no_id, from, "❌ Произошла ошибка при расчете стоимости доставки. Попробуйте позже или обратитесь к менеджеру.");
                 userStates.delete(from);
-                clearUserWaitingState(from);
                 return;
             }
         } else {
@@ -840,7 +850,6 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     console.log("❌ Информация о выбранном филиале не найдена");
                     await sendMessage(phone_no_id, from, "❌ Ошибка: выбранный филиал недоступен. Попробуйте заново или обратитесь к менеджеру.");
                     userStates.delete(from);
-                    clearUserWaitingState(from);
                     return;
                 }
             } else {
@@ -857,14 +866,12 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                         console.log("❌ Нет доступных филиалов");
                         await sendMessage(phone_no_id, from, "❌ Извините, в данный момент нет доступных филиалов для самовывоза. Обратитесь к менеджеру.");
                         userStates.delete(from);
-                        clearUserWaitingState(from);
                         return;
                     }
                 } catch (error) {
                     console.error("❌ Ошибка получения списка филиалов:", error);
                     await sendMessage(phone_no_id, from, "❌ Ошибка получения информации о филиалах. Попробуйте позже или обратитесь к менеджеру.");
                     userStates.delete(from);
-                    clearUserWaitingState(from);
                     return;
                 }
             }
@@ -875,7 +882,6 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             console.log("❌ Не удалось определить локацию для заказа");
             await sendMessage(phone_no_id, from, "❌ Ошибка определения места выполнения заказа. Обратитесь к менеджеру.");
             userStates.delete(from);
-            clearUserWaitingState(from);
             return;
         }
         
@@ -902,16 +908,15 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         
         // Очищаем состояние ТОЛЬКО после успешного оформления заказа
         userStates.delete(from);
-        clearUserWaitingState(from);
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
         await sendMessage(phone_no_id, from, "❌ Произошла критическая ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
         userStates.delete(from);
-        clearUserWaitingState(from);
     }
 }
 
+// Отправка заказа в API
 // Отправка заказа в API
 async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount) {
     try {
@@ -923,8 +928,9 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: customerData.customer.first_name || "Клиент",
-                comment: "Заказ через WhatsApp Bot",
+                // firstName: customerData.customer.first_name || "Клиент",
+                firstName : "Test",
+                comment: "Не реальный заказ",
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
@@ -1094,6 +1100,90 @@ async function getLocationWorkingHours(locationId) {
     }
 }
 
+// Дополнительная функция для получения подробной информации о филиале
+async function getDetailedLocationInfo(locationId) {
+    try {
+        console.log(`🏪 Получаем подробную информацию о филиале ${locationId}`);
+        
+        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = restaurantsResponse.data;
+        
+        const restaurant = restaurants.find(r => r.external_id == locationId);
+        
+        if (restaurant) {
+            // Получаем режим работы на сегодня
+            const today = new Date().getDay();
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const todayKey = dayNames[today];
+            
+            let workingHours = "11:00 - 23:45";
+            let isOpen = false;
+            
+            if (restaurant.schedule) {
+                const todaySchedule = restaurant.schedule.find(s => s.day === todayKey);
+                if (todaySchedule && todaySchedule.active) {
+                    const timeStart = todaySchedule.timeStart.substring(0, 5);
+                    const timeEnd = todaySchedule.timeEnd.substring(0, 5);
+                    workingHours = `${timeStart} - ${timeEnd}`;
+                    
+                    // Проверяем открыт ли сейчас
+                    const now = new Date();
+                    const currentTime = now.getHours() * 100 + now.getMinutes(); // 1530 для 15:30
+                    const startTime = parseInt(todaySchedule.timeStart.replace(':', '').substring(0, 4)); // 1100 для 11:00:00
+                    const endTime = parseInt(todaySchedule.timeEnd.replace(':', '').substring(0, 4));   // 2345 для 23:45:59
+                    
+                    isOpen = currentTime >= startTime && currentTime <= endTime;
+                }
+            }
+            
+            return {
+                id: restaurant.external_id,
+                title: restaurant.title,
+                address: restaurant.address,
+                workingHours: workingHours,
+                phone: restaurant.contacts?.find(c => c.type === 'PHONE')?.value,
+                whatsapp: restaurant.contacts?.find(c => c.type === 'WHATSAPP')?.value,
+                isOpen: isOpen
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error("❌ Ошибка получения информации о филиале:", error);
+        return null;
+    }
+}
+
+// Функция для проверки открыт ли филиал сейчас
+function isLocationOpenNow(schedule) {
+    try {
+        if (!schedule || !Array.isArray(schedule)) {
+            return false;
+        }
+        
+        const now = new Date();
+        const today = now.getDay();
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const todayKey = dayNames[today];
+        
+        const todaySchedule = schedule.find(s => s.day === todayKey);
+        
+        if (!todaySchedule || !todaySchedule.active) {
+            return false;
+        }
+        
+        const currentTime = now.getHours() * 100 + now.getMinutes();
+        const startTime = parseInt(todaySchedule.timeStart.replace(':', '').substring(0, 4));
+        const endTime = parseInt(todaySchedule.timeEnd.replace(':', '').substring(0, 4));
+        
+        return currentTime >= startTime && currentTime <= endTime;
+        
+    } catch (error) {
+        console.error("❌ Ошибка проверки времени работы:", error);
+        return false;
+    }
+}
+
 // Отправка сообщения об успешном заказе
 async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orderType, finalAmount, locationTitle) {
     try {
@@ -1147,13 +1237,9 @@ async function handleCatalogResponse(phone_no_id, from, message) {
         // Основной формат - order в handleCatalogOrderResponse
         await sendMessage(phone_no_id, from, "Спасибо за выбор! Обрабатываем ваш заказ...");
         
-        // Завершаем процесс заказа
-        clearUserWaitingState(from);
-        
     } catch (error) {
         console.error("Ошибка обработки ответа каталога:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке заказа. Попробуйте еще раз.");
-        clearUserWaitingState(from);
     }
 }
 
@@ -1278,128 +1364,6 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
         throw error;
     }
 }
-
-// // Отправка каталога
-// async function sendCatalog(phone_no_id, to) {
-//     console.log("=== ОТПРАВКА КАТАЛОГА ===");
-    
-//     const catalogData = {
-//         messaging_product: "whatsapp",
-//         to: to,
-//         type: "interactive",
-//         interactive: {
-//             type: "catalog_message",
-//             body: {
-//                 text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
-//             },
-//             footer: {
-//                 text: "Доставка 30-40 минут"
-//             },
-//             action: {
-//                 name: "catalog_message"
-//             }
-//         }
-//     };
-
-//     await sendWhatsAppMessage(phone_no_id, catalogData);
-// }
-
-// ЗАМЕНИТЕ ЭТУ ЧАСТЬ В ВАШЕМ КОДЕ:
-// Найдите секцию с menuCategories и замените её на это:
-
-// Оптимизированные группы товаров (6 сообщений вместо 12)
-const optimizedMenuGroups = [
-    // Группа 1: Роллы (первые 30)
-    [
-        {
-            title: "Роллы",
-            productIds: [
-                "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
-                "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
-                "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
-            ]
-        }
-    ],
-    
-    // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
-    [
-        {
-            title: "Роллы (продолжение)",
-            productIds: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
-        },
-        {
-            title: "теплые",
-            productIds: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
-        },
-        {
-            title: "без риса",
-            productIds: ["136", "134", "135"]
-        },
-        {
-            title: "сладкие",
-            productIds: ["150", "139", "137", "138"]
-        }
-    ],
-    
-    // Группа 3: Классические роллы + Темпура роллы (15 товаров)
-    [
-        {
-            title: "Классические роллы",
-            productIds: ["131", "130", "127", "133", "129", "128", "132"]
-        },
-        {
-            title: "Темпура роллы",
-            productIds: ["19", "17", "15", "21", "20", "18", "16", "22"]
-        },
-        {
-            title: "Круассаны",
-            productIds: ["93", "94", "92"]
-        },
-    ],
-    
-    // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
-    [
-        {
-            title: "Суши и гунканы",
-            productIds: [
-                "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
-                "77", "75", "73", "76", "74", "89", "88", "87", "90"
-            ]
-        }
-    ],
-    
-    // Группа 5: Сеты (24 товара)
-    [
-        {
-            title: "Сеты",
-            productIds: [
-                "109", "117", "123", "111", "112", "105", "103", "113", "118", 
-                "106", "119", "124", "121", "108", "110", "116", "125", "114", 
-                "104", "107", "122", "126", "120", "115"
-            ]
-        },
-        {
-            title: "Теплые сеты",
-            productIds: ["6", "3", "4", "1", "2", "5"]
-        }
-    ],
-    
-    // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
-    [
-        {
-            title: "Салаты",
-            productIds: ["98", "96", "95", "97", "99", "102", "101", "100"]
-        },
-        {
-            title: "Напитки",
-            productIds: ["13", "9", "8", "10", "12", "14", "7", "11"]
-        },
-        {
-            title: "Дополнительно",
-            productIds: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
-        }
-    ]
-];
 
 // ЗАМЕНИТЕ ФУНКЦИЮ sendCatalog НА ЭТУ:
 async function sendCatalog(phone_no_id, to) {
@@ -1905,6 +1869,10 @@ app.get("/flow", (req, res) => {
     res.status(200).json(status);
 });
 
+
+
+
+// order-status
 // POST endpoint для отправки уведомления о статусе заказа
 app.post("/order-status", async (req, res) => {
     try {

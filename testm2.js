@@ -1365,29 +1365,169 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     }
 }
 
-// Отправка каталога
+// ЗАМЕНИТЕ ФУНКЦИЮ sendCatalog НА ЭТУ:
 async function sendCatalog(phone_no_id, to) {
-    console.log("=== ОТПРАВКА КАТАЛОГА ===");
+    console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
     
-    const catalogData = {
-        messaging_product: "whatsapp",
-        to: to,
-        type: "interactive",
-        interactive: {
-            type: "catalog_message",
-            body: {
-                text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
-            },
-            footer: {
-                text: "Доставка 30-40 минут"
-            },
-            action: {
-                name: "catalog_message"
-            }
+    try {
+        // Получаем CATALOG_ID из переменных окружения
+        const catalogId = process.env.CATALOG_ID;
+        if (!catalogId) {
+            console.error("❌ CATALOG_ID не найден в переменных окружения");
+            throw new Error("CATALOG_ID не настроен");
         }
-    };
+        
+        // Отправляем приветственное сообщение
+        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
+        await sendMessage(phone_no_id, to, welcomeText);
+        
+        // Используем оптимизированные группы
+        const categoryGroups = optimizedMenuGroups;
+        
+        console.log(`📊 Оптимизированная группировка:`);
+        console.log(`   Исходно: 12 категорий`);
+        console.log(`   Результат: ${categoryGroups.length} групп`);
+        console.log(`   💰 Экономия: ${12 - categoryGroups.length} сообщений`);
+        
+        categoryGroups.forEach((group, index) => {
+            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
+            const categoryNames = group.map(cat => cat.title).join(', ');
+            console.log(`   Группа ${index + 1}: ${group.length} категорий, ${totalProducts} товаров`);
+            console.log(`     Категории: ${categoryNames}`);
+        });
+        
+        // Отправляем каждую группу как отдельный product_list
+        for (let i = 0; i < categoryGroups.length; i++) {
+            const group = categoryGroups[i];
+            
+            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
+            console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
+            
+            await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
+            
+            // // Небольшая задержка между сообщениями для лучшего UX
+            // if (i < categoryGroups.length - 1) {
+            //     await new Promise(resolve => setTimeout(resolve, 1000));
+            // }
+        }
+        
+        // Отправляем финальное сообщение
+        // await new Promise(resolve => setTimeout(resolve, 2000));
+        const finalText = `Выберите понравившиеся блюда из любой категории и добавьте в корзину.`;
+        await sendMessage(phone_no_id, to, finalText);
+        
+        console.log("✅ Оптимизированный каталог отправлен полностью");
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки каталога:", error);
+        
+        // Fallback - отправляем обычный каталог
+        console.log("🔄 Отправляем обычный каталог как fallback");
+        const fallbackCatalogData = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "catalog_message",
+                body: {
+                    text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
+                },
+                footer: {
+                    text: "Доставка 30-40 минут"
+                },
+                action: {
+                    name: "catalog_message"
+                }
+            }
+        };
+        
+        await sendWhatsAppMessage(phone_no_id, fallbackCatalogData);
+    }
+}
 
-    await sendWhatsAppMessage(phone_no_id, catalogData);
+// ОБНОВИТЕ ФУНКЦИЮ sendProductListWithSections для лучших заголовков:
+async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
+    try {
+        // Формируем секции для WhatsApp
+        const sections = categories.map(category => ({
+            title: category.title,
+            product_items: category.productIds.map(id => ({
+                product_retailer_id: id
+            }))
+        }));
+        
+        // Подсчитываем общее количество товаров
+        const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
+        
+        // Формируем умный заголовок
+        let headerText;
+        if (categories.length === 1) {
+            // Одна категория
+            headerText = `🍣 ${categories[0].title}`;
+        } else if (categories.length === 2) {
+            // Две категории
+            headerText = `🍣 ${categories[0].title} и ${categories[1].title}`;
+        } else if (categories.length === 3) {
+            // Три категории
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
+        } else if (categories.length === 4) {
+            // Три категории
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title}, ${categories[2].title} и ${categories[3].title}`;
+        } else {
+            // Много категорий - показываем первые две и количество остальных
+            const remaining = categories.length - 2;
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title} +${remaining} категорий`;
+        }
+        
+        // Ограничиваем длину заголовка (WhatsApp имеет лимиты)
+        if (headerText.length > 60) {
+            headerText = `${categories.length} категорий (${totalProducts} товаров)`;
+        }
+        
+        const productListData = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "product_list",
+                header: {
+                    type: "text",
+                    text: headerText
+                },
+                body: {
+                    // text: `${totalProducts} товаров\nВыберите блюда:`
+                    text: `Выберите блюда:`
+                },
+                footer: {
+                    text: "Yaposhkin Rolls"
+                },
+                action: {
+                    catalog_id: catalogId,
+                    sections: sections
+                }
+            }
+        };
+        
+        console.log(`📤 Отправляем product_list:`);
+        console.log(`   📋 Заголовок: ${headerText}`);
+        console.log(`   📦 Секций: ${sections.length}`);
+        console.log(`   🛍️ Товаров: ${totalProducts}`);
+        
+        // Детальный вывод товаров по секциям
+        sections.forEach(section => {
+            console.log(`     📦 ${section.title}: ${section.product_items.length} товаров`);
+        });
+        
+        await sendWhatsAppMessage(phone_no_id, productListData);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки product_list с секциями:", error);
+        
+        // Если не получилось отправить product_list, отправляем обычное сообщение
+        const categoryNames = categories.map(cat => cat.title).join(', ');
+        const fallbackText = `📱 Категории: ${categoryNames}\n\nПосмотрите наш каталог, выбрав меню в чате.`;
+        await sendMessage(phone_no_id, to, fallbackText);
+    }
 }
 
 // Универсальная функция отправки текстового сообщения
