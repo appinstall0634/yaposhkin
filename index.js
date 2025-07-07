@@ -1414,7 +1414,7 @@ async function sendCatalog(phone_no_id, to) {
         }
         
         // Отправляем приветственное сообщение
-        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
+        // const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
         await sendMessage(phone_no_id, to, welcomeText);
         
         // Используем оптимизированные группы
@@ -1506,6 +1506,9 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         } else if (categories.length === 3) {
             // Три категории
             headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
+        } else if (categories.length === 4) {
+            // Три категории
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title}, ${categories[2].title} и ${categories[3].title}`;
         } else {
             // Много категорий - показываем первые две и количество остальных
             const remaining = categories.length - 2;
