@@ -1379,7 +1379,7 @@ async function sendCatalog(phone_no_id, to) {
         
         // Отправляем приветственное сообщение
         // const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
-        await sendMessage(phone_no_id, to, welcomeText);
+        // await sendMessage(phone_no_id, to, welcomeText);
         
         // Используем оптимизированные группы
         const categoryGroups = optimizedMenuGroups;
