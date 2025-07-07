@@ -905,8 +905,8 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             locationTitle: locationTitle,
             type: orderType,
             customerContact: {
-                firstName: customerData.customer.first_name || "Клиент",
-                comment: "Заказ через WhatsApp Bot",
+                firstName: "Тест",
+                comment: "Тестовый заказ",
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
