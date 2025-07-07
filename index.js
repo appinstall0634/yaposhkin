@@ -302,9 +302,9 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         }
         
         // Отправляем каталог через 2 секунды
-        setTimeout(async () => {
+        // setTimeout(async () => {
             await sendCatalog(phone_no_id, from);
-        }, 2000);
+        // }, 2000);
         
     } catch (error) {
         console.error("❌ Ошибка обновления клиента:", error);
@@ -516,9 +516,9 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
             console.log("❓ Неизвестный тип Flow, отправляем каталог");
             await sendMessage(phone_no_id, from, "Спасибо! Выберите блюда из каталога:");
             
-            setTimeout(async () => {
+            // setTimeout(async () => {
                 await sendCatalog(phone_no_id, from);
-            }, 1000);
+            // }, 1000);
         }
 
     } catch (error) {
@@ -581,9 +581,9 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         await sendMessage(phone_no_id, from, confirmText);
         
         // Отправляем каталог через 2 секунды
-        setTimeout(async () => {
+        // setTimeout(async () => {
             await sendCatalog(phone_no_id, from);
-        }, 2000);
+        // }, 2000);
         
     } catch (error) {
         console.error("❌ Ошибка регистрации без местоположения:", error);
@@ -639,9 +639,9 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             await sendMessage(phone_no_id, from, confirmText);
             
             // Отправляем каталог через 1 секунду
-            setTimeout(async () => {
+            // setTimeout(async () => {
                 await sendCatalog(phone_no_id, from);
-            }, 1000);
+            // }, 1000);
         }
         
     } catch (error) {
