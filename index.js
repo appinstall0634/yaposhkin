@@ -681,7 +681,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
                 console.log(`Товар ${index + 1}:`, JSON.stringify(item, null, 2));
                 
                 // Получаем информацию о товаре из API
-                const productInfo = await getProductInfo(item.api_id);
+                const productInfo = await getProductInfo(item.product_retailer_id)
                 
                 const productName = productInfo.title || `Товар ${item.product_retailer_id}`;
                 const productId = productInfo.api_id;
