@@ -681,7 +681,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
                 console.log(`Товар ${index + 1}:`, JSON.stringify(item, null, 2));
                 
                 // Получаем информацию о товаре из API
-                const productInfo = await getProductInfo(item.product_retailer_id)
+                const productInfo = await getProductInfo(item.product_retailer_id);
                 
                 const productName = productInfo.title || `Товар ${item.product_retailer_id}`;
                 const productId = productInfo.api_id;
@@ -712,7 +712,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n\n`;
         
         // Получаем состояние пользователя для определения типа заказа
-        // const userState = userStates.get(from);
+        const userState = userStates.get(from);
         
         // Рассчитываем доставку и оформляем заказ
         await calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, userState);
@@ -731,20 +731,20 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         console.log("User state from parameter:", userState);
         
         // Если userState пустой, пытаемся получить из Map
-        // if (!userState) {
-        //     console.log("⚠️ User state is null, trying to get from Map");
-        //     // userState = userStates.get(from);
-        //     console.log("User state from Map:", userState);
-        // }
+        if (!userState) {
+            console.log("⚠️ User state is null, trying to get from Map");
+            userState = userStates.get(from);
+            console.log("User state from Map:", userState);
+        }
         
         // Если все еще нет состояния, создаем базовое для самовывоза
-        // if (!userState) {
-        //     console.log("⚠️ No user state found, defaulting to pickup");
-        //     userState = {
-        //         order_type: 'pickup',
-        //         flow_type: 'fallback'
-        //     };
-        // }
+        if (!userState) {
+            console.log("⚠️ No user state found, defaulting to pickup");
+            userState = {
+                order_type: 'pickup',
+                flow_type: 'fallback'
+            };
+        }
         
         // Получаем данные клиента
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
