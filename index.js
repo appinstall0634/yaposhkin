@@ -26,10 +26,11 @@ const userWaitingStates = new Map();
 
 // Возможные состояния ожидания
 const WAITING_STATES = {
-    NONE: 'none',                    // Принимаем любые сообщения
-    FLOW_RESPONSE: 'flow_response',  // Ожидаем ответ от Flow
-    LOCATION: 'location',            // Ожидаем местоположение
-    CATALOG_ORDER: 'catalog_order'   // Ожидаем ответ от каталога
+    NONE: 'none',                           // Принимаем любые сообщения
+    NEW_CUSTOMER_FLOW: 'new_customer_flow', // Ожидаем ответ от Flow нового клиента
+    EXISTING_CUSTOMER_FLOW: 'existing_customer_flow', // Ожидаем ответ от Flow существующего клиента
+    LOCATION: 'location',                   // Ожидаем местоположение
+    CATALOG_ORDER: 'catalog_order'          // Ожидаем ответ от каталога
 };
 
 app.listen(PORT, () => {
@@ -79,71 +80,17 @@ app.post("/webhook", async (req, res) => {
             console.log(`👤 Текущее состояние ожидания для ${from}: ${currentWaitingState}`);
 
             try {
-                // Проверяем тип сообщения и состояние ожидания
-                if (message.type === "location") {
-                    if (currentWaitingState === WAITING_STATES.LOCATION) {
-                        // Пользователь отправил местоположение когда мы его ждали
-                        console.log("📍 Обрабатываем ожидаемое местоположение");
-                        await handleLocationMessage(phone_no_id, from, message);
-                    } else {
-                        // Местоположение пришло неожиданно - игнорируем
-                        console.log("📍 Игнорируем неожиданное местоположение");
-                    }
-                } else if (message.type === "interactive") {
-                    console.log("Interactive message type:", message.interactive.type);
-                    
-                    if (message.interactive.type === "nfm_reply") {
-                        if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
-                            // Ответ от Flow когда мы его ждали
-                            console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
-                            await handleFlowResponse(phone_no_id, from, message, body_param);
-                        } else {
-                            // Flow ответ пришел неожиданно - игнорируем
-                            console.log("🔄 Игнорируем неожиданный ответ от Flow");
-                        }
-                    } else if (message.interactive.type === "product_list_reply") {
-                        if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                            // Ответ от каталога когда мы его ждали
-                            console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
-                            await handleCatalogResponse(phone_no_id, from, message);
-                        } else {
-                            // Ответ от каталога пришел неожиданно - игнорируем
-                            console.log("🛒 Игнорируем неожиданный ответ от каталога");
-                        }
-                    } else if (message.interactive.type === "button_reply") {
-                        // Ответ от кнопки - обрабатываем всегда
-                        console.log("🔘 Обрабатываем ответ от кнопки");
-                        await handleButtonResponse(phone_no_id, from, message);
-                    } else {
-                        console.log("❓ Неизвестный тип interactive сообщения:", message.interactive.type);
-                        if (currentWaitingState === WAITING_STATES.NONE) {
-                            await handleIncomingMessage(phone_no_id, from, message);
-                        } else {
-                            console.log("⏳ Игнорируем сообщение - ожидаем другой тип ответа");
-                        }
-                    }
-                } else if (message.type === "order") {
-                    if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                        // Ответ от каталога в формате order когда мы его ждали
-                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
-                        await handleCatalogOrderResponse(phone_no_id, from, message);
-                    } else {
-                        // Order пришел неожиданно - игнорируем
-                        console.log("🛒 Игнорируем неожиданный order ответ");
-                    }
-                } else {
-                    // Любое другое сообщение
-                    if (currentWaitingState === WAITING_STATES.NONE) {
-                        // Принимаем обычные сообщения только если не ждем специфичного ответа
-                        console.log("📝 Обрабатываем обычное сообщение");
-                        await handleIncomingMessage(phone_no_id, from, message);
-                    } else {
-                        // Игнорируем обычные сообщения если ждем специфичного ответа
-                        console.log(`⏳ Игнорируем текстовое сообщение - ожидаем ${currentWaitingState}`);
-                    }
+                // СТРОГАЯ ЛОГИКА ОБРАБОТКИ ПО СОСТОЯНИЯМ
+                const handled = await handleMessageByState(phone_no_id, from, message, currentWaitingState, body_param);
+                
+                if (!handled) {
+                    console.log("⚠️ Сообщение не было обработано - неожиданный тип в текущем состоянии");
                 }
+
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
+                await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте еще раз.");
+                clearUserWaitingState(from);
             }
 
             res.sendStatus(200);
@@ -153,19 +100,158 @@ app.post("/webhook", async (req, res) => {
     }
 });
 
+// 3. ДОБАВЬТЕ ЭТУ НОВУЮ ФУНКЦИЮ:
+async function handleMessageByState(phone_no_id, from, message, currentState, body_param) {
+    console.log(`🎯 Обрабатываем сообщение в состоянии: ${currentState}`);
+
+    switch (currentState) {
+        case WAITING_STATES.NONE:
+            // Принимаем любые сообщения - начинаем новый flow
+            console.log("📝 Состояние NONE - обрабатываем как новое сообщение");
+            await handleIncomingMessage(phone_no_id, from, message);
+            return true;
+
+        case WAITING_STATES.NEW_CUSTOMER_FLOW:
+            // Ожидаем ТОЛЬКО ответ от Flow нового клиента
+            if (message.type === "interactive" && message.interactive.type === "nfm_reply") {
+                console.log("🆕 Получен ожидаемый ответ от Flow нового клиента");
+                await handleFlowResponse(phone_no_id, from, message, body_param);
+                return true;
+            } else {
+                console.log("⏳ Игнорируем сообщение - ожидаем ответ от Flow нового клиента");
+                await sendMessage(phone_no_id, from, "Пожалуйста, заполните форму регистрации выше 👆");
+                return false;
+            }
+
+        case WAITING_STATES.EXISTING_CUSTOMER_FLOW:
+            // Ожидаем ТОЛЬКО ответ от Flow существующего клиента
+            if (message.type === "interactive" && message.interactive.type === "nfm_reply") {
+                console.log("👤 Получен ожидаемый ответ от Flow существующего клиента");
+                await handleFlowResponse(phone_no_id, from, message, body_param);
+                return true;
+            } else {
+                console.log("⏳ Игнорируем сообщение - ожидаем ответ от Flow существующего клиента");
+                await sendMessage(phone_no_id, from, "Пожалуйста, заполните форму заказа выше 👆");
+                return false;
+            }
+
+        case WAITING_STATES.LOCATION:
+            // Ожидаем ТОЛЬКО местоположение
+            if (message.type === "location") {
+                console.log("📍 Получено ожидаемое местоположение");
+                await handleLocationMessage(phone_no_id, from, message);
+                return true;
+            } else {
+                console.log("⏳ Игнорируем сообщение - ожидаем местоположение");
+                await sendMessage(phone_no_id, from, "Пожалуйста, отправьте ваше местоположение 📍\n\nНажмите на скрепку 📎 → Местоположение 📍 → Отправить текущее местоположение");
+                return false;
+            }
+
+        case WAITING_STATES.CATALOG_ORDER:
+            // Ожидаем ТОЛЬКО ответ от каталога
+            if (message.type === "interactive" && message.interactive.type === "product_list_reply") {
+                console.log("🛒 Получен ожидаемый ответ от каталога (product_list)");
+                await handleCatalogResponse(phone_no_id, from, message);
+                return true;
+            } else if (message.type === "order") {
+                console.log("🛒 Получен ожидаемый ответ от каталога (order)");
+                await handleCatalogOrderResponse(phone_no_id, from, message);
+                return true;
+            } else {
+                console.log("⏳ Игнорируем сообщение - ожидаем выбор товаров из каталога");
+                await sendMessage(phone_no_id, from, "Пожалуйста, выберите блюда из каталога выше 👆\n\nНажмите на товары и добавьте их в корзину 🛒");
+                return false;
+            }
+
+        default:
+            console.log("❓ Неизвестное состояние ожидания");
+            clearUserWaitingState(from);
+            await handleIncomingMessage(phone_no_id, from, message);
+            return true;
+    }
+}
+
+
+async function checkCustomerAndSendFlow(phone_no_id, from) {
+    try {
+        console.log(`🔍 Проверяем клиента: ${from}`);
+        
+        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+        const restaurants = restaurantsResponse.data;
+        
+        const branches = restaurants.map(restaurant => ({
+            id: restaurant.external_id.toString(),
+            title: `🏪 ${restaurant.title}`
+        }));
+        
+        const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
+        const customerData = customerResponse.data;
+        
+        const hasAddresses = customerData.customer.addresses && customerData.customer.addresses.length > 0;
+        const isNewCustomer = !hasAddresses || 
+                             !customerData.customer.first_name || 
+                             customerData.customer.first_name === 'Имя';
+
+        if (isNewCustomer) {
+            console.log('🆕 Новый клиент - отправляем регистрационный Flow');
+            await sendNewCustomerFlow(phone_no_id, from, branches);
+            setUserWaitingState(from, WAITING_STATES.NEW_CUSTOMER_FLOW);
+        } else {
+            console.log('✅ Существующий клиент - отправляем Flow с адресами');
+            await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
+            setUserWaitingState(from, WAITING_STATES.EXISTING_CUSTOMER_FLOW);
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка проверки клиента:', error);
+        
+        try {
+            const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+            const restaurants = restaurantsResponse.data;
+            const branches = restaurants.map(restaurant => ({
+                id: restaurant.external_id.toString(),
+                title: `🏪 ${restaurant.title}`
+            }));
+            
+            await sendNewCustomerFlow(phone_no_id, from, branches);
+            setUserWaitingState(from, WAITING_STATES.NEW_CUSTOMER_FLOW);
+        } catch (fallbackError) {
+            console.error('❌ Критическая ошибка получения филиалов:', fallbackError);
+            await sendMessage(phone_no_id, from, "Извините, временные технические проблемы. Попробуйте позже.");
+            clearUserWaitingState(from);
+        }
+    }
+}
+
+
 // Функции для управления состояниями ожидания
 function setUserWaitingState(phone, state) {
-    console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${state}`);
+    const validStates = Object.values(WAITING_STATES);
+    if (!validStates.includes(state)) {
+        console.error(`❌ Попытка установить неизвестное состояние: ${state}`);
+        return false;
+    }
+    
+    const previousState = userWaitingStates.get(phone);
+    console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${previousState || 'NONE'} → ${state}`);
     userWaitingStates.set(phone, state);
+    return true;
 }
 
 function clearUserWaitingState(phone) {
-    console.log(`✅ Очищаем состояние ожидания для ${phone}`);
-    userWaitingStates.delete(phone);
+    const previousState = userWaitingStates.get(phone);
+    if (previousState) {
+        console.log(`✅ Очищаем состояние ожидания для ${phone} (было: ${previousState})`);
+        userWaitingStates.delete(phone);
+    } else {
+        console.log(`ℹ️ Состояние ожидания для ${phone} уже было очищено`);
+    }
 }
 
 function getUserWaitingState(phone) {
-    return userWaitingStates.get(phone) || WAITING_STATES.NONE;
+    const state = userWaitingStates.get(phone) || WAITING_STATES.NONE;
+    console.log(`📖 Текущее состояние для ${phone}: ${state}`);
+    return state;
 }
 
 // Обработка местоположения
@@ -206,13 +292,9 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
     try {
         console.log("=== ОБНОВЛЕНИЕ КЛИЕНТА С МЕСТОПОЛОЖЕНИЕМ ===");
         
-        // Получаем qr_token
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
         const qr_token = customerResponse.data.qr_access_token;
         
-        console.log("🔑 QR Token:", qr_token);
-        
-        // Формируем данные для обновления
         const updateData = {
             firstName: userState.customer_name,
             addresses: [{
@@ -236,9 +318,6 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
             }]
         };
         
-        console.log("📝 Данные для обновления:", updateData);
-        
-        // Отправляем запрос на обновление
         const updateResponse = await axios.post(
             `${TEMIR_API_BASE}/qr/update-customer/?qr_token=${qr_token}`,
             updateData
@@ -246,16 +325,14 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         console.log("✅ Клиент успешно обновлен:", updateResponse.data);
         
-        // ОБНОВЛЯЕМ состояние вместо очистки - добавляем информацию о том, что местоположение обработано
         userStates.set(from, {
             ...userState,
-            order_type: 'delivery', // Принудительно устанавливаем delivery
-            delivery_choice: 'new', // Новый адрес
-            location_processed: true, // Флаг что местоположение обработано
-            new_address: userState.delivery_address // Сохраняем адрес
+            order_type: 'delivery',
+            delivery_choice: 'new',
+            location_processed: true,
+            new_address: userState.delivery_address
         });
         
-        // Отправляем подтверждение
         if (userState.flow_type === 'new_customer') {
             const confirmText = `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
             await sendMessage(phone_no_id, from, confirmText);
@@ -264,12 +341,8 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
             await sendMessage(phone_no_id, from, confirmText);
         }
         
-        // Меняем состояние ожидания на ожидание заказа из каталога
         setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-        
-        
-            await sendCatalog(phone_no_id, from);
-     
+        await sendCatalog(phone_no_id, from);
         
     } catch (error) {
         console.error("❌ Ошибка обновления клиента:", error);
@@ -282,11 +355,11 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         }
         
         await sendMessage(phone_no_id, from, errorMessage);
-        // Очищаем состояние только при ошибке
         userStates.delete(from);
         clearUserWaitingState(from);
     }
 }
+
 
 // Обработка входящих сообщений - проверка клиента
 async function handleIncomingMessage(phone_no_id, from, message) {
@@ -300,67 +373,7 @@ async function handleIncomingMessage(phone_no_id, from, message) {
     await checkCustomerAndSendFlow(phone_no_id, from);
 }
 
-// Проверка клиента и отправка соответствующего Flow
-async function checkCustomerAndSendFlow(phone_no_id, from) {
-    try {
-        console.log(`🔍 Проверяем клиента: ${from}`);
-        
-        // Получаем список филиалов для передачи в Flow
-        const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
-        const restaurants = restaurantsResponse.data;
-        
-        // Формируем филиалы в формате объектов
-        const branches = restaurants.map(restaurant => ({
-            id: restaurant.external_id.toString(),
-            title: `🏪 ${restaurant.title}`
-        }));
-        
-        console.log("🏪 Филиалы для Flow:", branches);
-        
-        // Проверяем клиента в базе Temir
-        const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
-        const customerData = customerResponse.data;
-        
-        console.log('👤 Данные клиента:', customerData);
 
-        // Проверяем есть ли адреса у клиента
-        const hasAddresses = customerData.customer.addresses && customerData.customer.addresses.length > 0;
-        const isNewCustomer = !hasAddresses || 
-                             !customerData.customer.first_name || 
-                             customerData.customer.first_name === 'Имя';
-
-        if (isNewCustomer) {
-            console.log('🆕 Новый клиент - отправляем регистрационный Flow');
-            await sendNewCustomerFlow(phone_no_id, from, branches);
-        } else {
-            console.log('✅ Существующий клиент - отправляем Flow с адресами');
-            await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
-        }
-
-        // Устанавливаем состояние ожидания ответа от Flow
-        setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
-
-    } catch (error) {
-        console.error('❌ Ошибка проверки клиента:', error);
-        
-        // В случае ошибки API - получаем филиалы и отправляем регистрационный Flow
-        try {
-            const restaurantsResponse = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
-            const restaurants = restaurantsResponse.data;
-            const branches = restaurants.map(restaurant => ({
-                id: restaurant.external_id.toString(),
-                title: `🏪 ${restaurant.title}`
-            }));
-            
-            console.log('🆕 Ошибка API - отправляем регистрационный Flow');
-            await sendNewCustomerFlow(phone_no_id, from, branches);
-            setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
-        } catch (fallbackError) {
-            console.error('❌ Критическая ошибка получения филиалов:', fallbackError);
-            await sendMessage(phone_no_id, from, "Извините, временные технические проблемы. Попробуйте позже.");
-        }
-    }
-}
 
 // Отправка Flow для новых клиентов
 async function sendNewCustomerFlow(phone_no_id, from, branches) {
@@ -434,7 +447,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                 text: "🛒 Оформление заказа"
             },
             body: {
-                text: `Привет, ${customer.first_name}! Настройте детали заказа`
+                text: `Привет, ${customer.first_name}!`
             },
             footer: {
                 text: "Выберите тип доставки и адрес"
@@ -445,7 +458,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
-                    flow_cta: "Настроить заказ",
+                    flow_cta: "Заказать",
                     flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
@@ -504,23 +517,21 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
     try {
         console.log('📝 Регистрируем нового клиента:', data);
 
-        // Если выбрана доставка и есть новый адрес - запрашиваем местоположение
         if (data.order_type === 'delivery' && data.delivery_address) {
-            // Сохраняем состояние для ожидания местоположения
             userStates.set(from, {
                 flow_type: 'new_customer',
                 customer_name: data.customer_name,
-                delivery_address: data.delivery_address
+                delivery_address: data.delivery_address,
+                order_type: data.order_type,
+                branch: data.branch
             });
 
-            // Устанавливаем состояние ожидания местоположения
             setUserWaitingState(from, WAITING_STATES.LOCATION);
-
-            // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
         } else {
-            // Самовывоз - сразу регистрируем и отправляем каталог
             await registerCustomerWithoutLocation(phone_no_id, from, data);
+            setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+            await sendCatalog(phone_no_id, from);
         }
 
     } catch (error) {
@@ -535,16 +546,13 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
     try {
         console.log("=== РЕГИСТРАЦИЯ КЛИЕНТА БЕЗ МЕСТОПОЛОЖЕНИЯ ===");
         
-        // Получаем qr_token
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
         const qr_token = customerResponse.data.qr_access_token;
         
-        // Формируем данные для обновления (только имя)
         const updateData = {
             firstName: data.customer_name
         };
         
-        // Отправляем запрос на обновление
         const updateResponse = await axios.post(
             `${TEMIR_API_BASE}/qr/update-customer/?qr_token=${qr_token}`,
             updateData
@@ -552,17 +560,8 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         
         console.log("✅ Клиент зарегистрирован:", updateResponse.data);
         
-        // Отправляем подтверждение
         const confirmText = `Спасибо за регистрацию, ${data.customer_name}! 🎉\n\nВы выбрали самовывоз.\n\nТеперь выберите блюда из нашего каталога! 🍣`;
         await sendMessage(phone_no_id, from, confirmText);
-        
-        // Устанавливаем состояние ожидания заказа из каталога
-        setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-        
-        // Отправляем каталог через 2 секунды
-
-            await sendCatalog(phone_no_id, from);
-
         
     } catch (error) {
         console.error("❌ Ошибка регистрации без местоположения:", error);
@@ -576,7 +575,6 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
     try {
         console.log('🛒 Обрабатываем заказ существующего клиента:', data);
         
-        // Сохраняем данные заказа для дальнейшего использования
         userStates.set(from, {
             flow_type: 'existing_customer',
             order_type: data.order_type,
@@ -586,32 +584,23 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             customer_name: data.customer_name
         });
         
-        // Проверяем что выбрал клиент
         if (data.order_type === 'delivery' && data.delivery_choice === 'new' && data.new_address) {
-            console.log('📍 Клиент выбрал доставку с новым адресом:', data.new_address);
-            
-            // Обновляем состояние для запроса местоположения, НО СОХРАНЯЕМ ВСЕ ДАННЫЕ
             userStates.set(from, {
                 flow_type: 'existing_customer',
                 customer_name: data.customer_name || 'Клиент',
                 delivery_address: data.new_address,
-                // ВАЖНО: сохраняем все данные заказа
                 order_type: data.order_type,
                 delivery_choice: data.delivery_choice,
                 new_address: data.new_address,
                 branch: data.branch
             });
             
-            // Устанавливаем состояние ожидания местоположения
             setUserWaitingState(from, WAITING_STATES.LOCATION);
-            
-            // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
             
         } else {
             console.log('✅ Клиент выбрал существующий адрес или самовывоз - отправляем каталог');
             
-            // Формируем сообщение в зависимости от типа заказа
             let confirmText;
             if (data.order_type === 'delivery') {
                 confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\nВыберите блюда из каталога:`;
@@ -620,14 +609,8 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             }
             
             await sendMessage(phone_no_id, from, confirmText);
-            
-            // Устанавливаем состояние ожидания заказа из каталога
             setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-            
-            // Отправляем каталог через 1 секунду
-
-                await sendCatalog(phone_no_id, from);
-
+            await sendCatalog(phone_no_id, from);
         }
         
     } catch (error) {
@@ -917,7 +900,6 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
     try {
         console.log("📝 Отправляем заказ в API");
         
-        // Формируем данные для preorder
         const preorderData = {
             locationId: parseInt(locationId),
             locationTitle: locationTitle,
@@ -930,16 +912,13 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
                     value: from
                 }
             },
-            orderDueDateDelta: 0, // Как можно скорее
+            orderDueDateDelta: 0,
             guests: [{
                 orderItems: orderItems
             }],
             paymentSumWithDiscount: null
         };
         
-        console.log("📝 Данные для preorder:", JSON.stringify(preorderData, null, 2));
-        
-        // Отправляем заказ в API
         const preorderResponse = await axios.post(
             `${TEMIR_API_BASE}/qr/preorder/?qr_token=${customerData.qr_access_token}`,
             preorderData
@@ -947,9 +926,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
         
         console.log("✅ Ответ preorder API:", preorderResponse.data);
         
-        // Проверяем наличие ошибки в ответе даже при статусе 200
         if (preorderResponse.data.error) {
-            console.log("❌ Обнаружена ошибка в ответе API:", preorderResponse.data.error);
             throw {
                 response: {
                     status: 200,
@@ -958,84 +935,51 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             };
         }
         
-        // Отправляем сообщение об успехе
         await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle);
+
+        // ВАЖНО: ОЧИЩАЕМ ВСЕ СОСТОЯНИЯ ПОСЛЕ УСПЕШНОГО ЗАКАЗА
+        userStates.delete(from);
+        clearUserWaitingState(from);
+        
+        console.log("✅ Заказ оформлен успешно, состояния очищены, клиент может отправлять новые сообщения");
 
     } catch (error) {
         console.error('❌ Ошибка отправки заказа в API:', error);
         
-        let errorMessage = '';
-        
-        // Проверяем специфичные ошибки
-        if (error.response?.data?.error?.description) {
-            const errorDescription = error.response.data.error.description;
-            
-            if (errorDescription.includes("Location is closed")) {
-                // Филиал закрыт
-                console.log("🔒 Филиал закрыт");
-                
-                // Получаем информацию о режиме работы
-                const workingHours = await getLocationWorkingHours(locationId);
-                
-                if (orderType === 'delivery') {
-                    errorMessage = `⏰ К сожалению, доставка сейчас недоступна.\n\n`;
-                    errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
-                    if (workingHours) {
-                        errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
-                    }
-                    errorMessage += `Вы можете оформить заказ в рабочее время или связаться с нашим менеджером.`;
-                } else {
-                    errorMessage = `⏰ К сожалению, самовывоз сейчас недоступен.\n\n`;
-                    errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
-                    if (workingHours) {
-                        errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
-                    }
-                    errorMessage += `Вы можете забрать заказ в рабочее время или связаться с нашим менеджером.`;
-                }
-            } else if (errorDescription.includes("out of stock") || errorDescription.includes("unavailable")) {
-                // Товар недоступен
-                errorMessage = `❌ К сожалению, некоторые товары из вашего заказа сейчас недоступны.\n\n`;
-                errorMessage += `Попробуйте выбрать другие блюда из каталога или свяжитесь с нашим менеджером для уточнения наличия.`;
-            } else {
-                // Другие ошибки API
-                errorMessage = `❌ Ошибка оформления заказа: ${errorDescription}\n\n`;
-                errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
-            }
-        } else if (error.response?.data?.error?.type) {
-            // Обработка ошибок по типу
-            const errorType = error.response.data.error.type;
-            
-            if (errorType === "LocationIsClosedException") {
-                console.log("🔒 Филиал закрыт (по типу ошибки)");
-                
-                const workingHours = await getLocationWorkingHours(locationId);
-                
-                errorMessage = `⏰ К сожалению, ${orderType === 'delivery' ? 'доставка' : 'самовывоз'} сейчас недоступен.\n\n`;
-                errorMessage += `🏪 Филиал "${locationTitle}" закрыт.\n`;
-                if (workingHours) {
-                    errorMessage += `🕐 Режим работы: ${workingHours}\n\n`;
-                }
-                errorMessage += `Вы можете оформить заказ в рабочее время или связаться с нашим менеджером.`;
-            } else {
-                errorMessage = `❌ Ошибка: ${errorType}\n\n`;
-                errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
-            }
-        } else if (error.response?.status === 400) {
-            errorMessage = `❌ Ошибка в данных заказа.\n\n`;
-            errorMessage += `Попробуйте оформить заказ заново или обратитесь к менеджеру.`;
-        } else if (error.response?.status === 404) {
-            errorMessage = `❌ Выбранный филиал временно недоступен.\n\n`;
-            errorMessage += `Попробуйте позже или обратитесь к менеджеру.`;
-        } else if (error.response?.status === 500) {
-            errorMessage = `❌ Технические неполадки на сервере.\n\n`;
-            errorMessage += `Мы уже работаем над решением проблемы. Попробуйте через несколько минут.`;
-        } else {
-            errorMessage = `❌ Произошла ошибка при оформлении заказа.\n\n`;
-            errorMessage += `Наш менеджер свяжется с вами для уточнения деталей.`;
-        }
-        
+        let errorMessage = getOrderErrorMessage(error, orderType, locationTitle);
         await sendMessage(phone_no_id, from, errorMessage);
+        
+        // ОЧИЩАЕМ СОСТОЯНИЯ ПРИ ОШИБКЕ
+        userStates.delete(from);
+        clearUserWaitingState(from);
     }
+}
+
+function getOrderErrorMessage(error, orderType, locationTitle) {
+    if (error.response?.data?.error?.description) {
+        const errorDescription = error.response.data.error.description;
+        
+        if (errorDescription.includes("Location is closed")) {
+            return `⏰ К сожалению, ${orderType === 'delivery' ? 'доставка' : 'самовывоз'} сейчас недоступен.\n\n🏪 Филиал "${locationTitle}" закрыт.\n\nВы можете оформить заказ в рабочее время или связаться с нашим менеджером.`;
+        } else if (errorDescription.includes("out of stock") || errorDescription.includes("unavailable")) {
+            return `❌ К сожалению, некоторые товары из вашего заказа сейчас недоступны.\n\nПопробуйте выбрать другие блюда из каталога или свяжитесь с нашим менеджером для уточнения наличия.`;
+        }
+    }
+    
+    return `❌ Произошла ошибка при оформлении заказа.\n\nНаш менеджер свяжется с вами для решения проблемы.`;
+}
+
+function logWaitingStatesStats() {
+    const stats = {};
+    
+    userWaitingStates.forEach((state, phone) => {
+        stats[state] = (stats[state] || 0) + 1;
+    });
+    
+    console.log("📊 Статистика состояний ожидания:", {
+        total: userWaitingStates.size,
+        byState: stats
+    });
 }
 
 // Получение режима работы филиала
@@ -1131,8 +1075,14 @@ async function handleButtonResponse(phone_no_id, from, message) {
         console.log("=== ОТВЕТ ОТ КНОПКИ ===");
         const buttonId = message.interactive.button_reply.id;
         
-        // Обрабатываем нажатие кнопок если нужно
         console.log("Button ID:", buttonId);
+        
+        // Кнопки обрабатываем всегда, независимо от состояния
+        const currentState = getUserWaitingState(from);
+        console.log(`🔘 Обработка кнопки в состоянии: ${currentState}`);
+        
+        // Здесь можно добавить специфичную обработку кнопок
+        
     } catch (error) {
         console.error("Ошибка обработки ответа кнопки:", error);
     }
@@ -1156,6 +1106,15 @@ async function handleCatalogResponse(phone_no_id, from, message) {
         clearUserWaitingState(from);
     }
 }
+
+function cleanupStaleStates() {
+    if (userWaitingStates.size > 0) {
+        console.log(`🧹 Активных состояний ожидания: ${userWaitingStates.size}`);
+        logWaitingStatesStats();
+    }
+}
+
+setInterval(cleanupStaleStates, 10 * 60 * 1000);
 
 // Кэш товаров для оптимизации
 let productsCache = null;
@@ -2113,6 +2072,18 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
 
     return message;
 }
+
+
+async function resetUserState(phone_no_id, from, reason = "manual reset") {
+    console.log(`🔄 Принудительный сброс состояния для ${from}, причина: ${reason}`);
+    
+    userStates.delete(from);
+    clearUserWaitingState(from);
+    
+    await sendMessage(phone_no_id, from, "Состояние сброшено. Отправьте любое сообщение для начала.");
+}
+
+
 
 // Функция получения эмодзи для статуса
 function getStatusEmoji(status) {
