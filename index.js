@@ -266,6 +266,8 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         // Меняем состояние ожидания на ожидание заказа из каталога
         setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+
+        console.log(`after location userState is setUserWaitingState ${from} : ${WAITING_STATES.CATALOG_ORDER}`)
         
         
             await sendCatalog(phone_no_id, from);
