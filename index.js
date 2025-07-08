@@ -620,10 +620,9 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             // Формируем сообщение в зависимости от типа заказа
             let confirmText;
             if (data.order_type === 'delivery') {
-                user_addresses.find(address => address.id === targetId);
-                confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice)}\n\nВыберите блюда из каталога:`;
+                confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
             } else {
-                confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\n${data.branches[data.branch]}\n\nВыберите блюда из каталога:`;
+                confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\n${data.branches.find(branch => branch.id === data.branch).title}\n\nВыберите блюда из каталога:`;
             }
             
             await sendMessage(phone_no_id, from, confirmText);
