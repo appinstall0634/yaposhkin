@@ -94,25 +94,25 @@ app.post("/webhook", async (req, res) => {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
-                        if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
+                        // if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
                             // Ответ от Flow когда мы его ждали
                             console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
                             await handleFlowResponse(phone_no_id, from, message, body_param);
-                        } else {
-                            await sendMessage(phone_no_id, from, "Заполните форму.");
-                            // Flow ответ пришел неожиданно - игнорируем
-                            console.log("🔄 Игнорируем неожиданный ответ от Flow");
-                        }
+                        // } else {
+                        //     await sendMessage(phone_no_id, from, "Заполните форму.");
+                        //     // Flow ответ пришел неожиданно - игнорируем
+                        //     console.log("🔄 Игнорируем неожиданный ответ от Flow");
+                        // }
                     } else if (message.interactive.type === "product_list_reply") {
-                        if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
+                        // if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
                             // Ответ от каталога когда мы его ждали
                             console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
                             await handleCatalogResponse(phone_no_id, from, message);
-                        } else {
-                            await sendMessage(phone_no_id, from, "Выберите блюда.");
-                            // Ответ от каталога пришел неожиданно - игнорируем
-                            console.log("🛒 Игнорируем неожиданный ответ от каталога");
-                        }
+                        // } else {
+                        //     await sendMessage(phone_no_id, from, "Выберите блюда.");
+                        //     // Ответ от каталога пришел неожиданно - игнорируем
+                        //     console.log("🛒 Игнорируем неожиданный ответ от каталога");
+                        // }
                     } else if (message.interactive.type === "button_reply") {
                         // Ответ от кнопки - обрабатываем всегда
                         console.log("🔘 Обрабатываем ответ от кнопки");
@@ -126,25 +126,25 @@ app.post("/webhook", async (req, res) => {
                         }
                     }
                 } else if (message.type === "order") {
-                    if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
+                    // if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
                         // Ответ от каталога в формате order когда мы его ждали
                         console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                         await handleCatalogOrderResponse(phone_no_id, from, message);
-                    } else {
-                        await sendMessage(phone_no_id, from, "Выберите блюда и отправьте.");
-                        // Order пришел неожиданно - игнорируем
-                        console.log("🛒 Игнорируем неожиданный order ответ");
-                    }
+                    // } else {
+                    //     await sendMessage(phone_no_id, from, "Выберите блюда и отправьте.");
+                    //     // Order пришел неожиданно - игнорируем
+                    //     console.log("🛒 Игнорируем неожиданный order ответ");
+                    // }
                 } else {
                     // Любое другое сообщение
-                    if (currentWaitingState === WAITING_STATES.NONE) {
+                    // if (currentWaitingState === WAITING_STATES.NONE) {
                         // Принимаем обычные сообщения только если не ждем специфичного ответа
                         console.log("📝 Обрабатываем обычное сообщение");
                         await handleIncomingMessage(phone_no_id, from, message);
-                    } else {
+                    // } else {
                         // Игнорируем обычные сообщения если ждем специфичного ответа
                         console.log(`⏳ Игнорируем текстовое сообщение - ожидаем ${currentWaitingState}`);
-                    }
+                    // }
                 }
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
