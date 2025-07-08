@@ -1184,7 +1184,7 @@ async function getAllProducts() {
         const productsMap = {};
         products.forEach(product => {
             productsMap[product.api_id] = {
-                id: product.api_id,
+                id: product.id,
                 api_id: product.api_id,
                 title: product.title,
                 measure_unit: product.measure_unit_title || 'шт'
