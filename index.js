@@ -86,6 +86,7 @@ app.post("/webhook", async (req, res) => {
                         console.log("📍 Обрабатываем ожидаемое местоположение");
                         await handleLocationMessage(phone_no_id, from, message);
                     } else {
+                        await sendMessage(phone_no_id, from, "Отправьте местоположение.");
                         // Местоположение пришло неожиданно - игнорируем
                         console.log("📍 Игнорируем неожиданное местоположение");
                     }
@@ -98,6 +99,7 @@ app.post("/webhook", async (req, res) => {
                             console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
                             await handleFlowResponse(phone_no_id, from, message, body_param);
                         } else {
+                            await sendMessage(phone_no_id, from, "Заполните форму.");
                             // Flow ответ пришел неожиданно - игнорируем
                             console.log("🔄 Игнорируем неожиданный ответ от Flow");
                         }
@@ -107,6 +109,7 @@ app.post("/webhook", async (req, res) => {
                             console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
                             await handleCatalogResponse(phone_no_id, from, message);
                         } else {
+                            await sendMessage(phone_no_id, from, "Выберите блюда.");
                             // Ответ от каталога пришел неожиданно - игнорируем
                             console.log("🛒 Игнорируем неожиданный ответ от каталога");
                         }
@@ -128,6 +131,7 @@ app.post("/webhook", async (req, res) => {
                         console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                         await handleCatalogOrderResponse(phone_no_id, from, message);
                     } else {
+                        await sendMessage(phone_no_id, from, "Выберите блюда и отправьте.");
                         // Order пришел неожиданно - игнорируем
                         console.log("🛒 Игнорируем неожиданный order ответ");
                     }
@@ -436,7 +440,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                 text: "🛒 Оформление заказа"
             },
             body: {
-                text: `Привет, ${customer.first_name}! Настройте детали заказа`
+                text: `Привет, ${customer.first_name}!`
             },
             footer: {
                 text: "Выберите тип доставки и адрес"
@@ -447,7 +451,7 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
-                    flow_cta: "Настроить заказ",
+                    flow_cta: "Заказать",
                     flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
@@ -616,9 +620,10 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             // Формируем сообщение в зависимости от типа заказа
             let confirmText;
             if (data.order_type === 'delivery') {
-                confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\nВыберите блюда из каталога:`;
+                user_addresses.find(address => address.id === targetId);
+                confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice)}\n\nВыберите блюда из каталога:`;
             } else {
-                confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\nВыберите блюда из каталога:`;
+                confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\n${data.branches[data.branch]}\n\nВыберите блюда из каталога:`;
             }
             
             await sendMessage(phone_no_id, from, confirmText);
@@ -643,7 +648,7 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
 async function sendLocationRequest(phone_no_id, from, customerName) {
     console.log("=== ЗАПРОС МЕСТОПОЛОЖЕНИЯ ===");
     
-    const locationText = `Спасибо, ${customerName}! 📍\n\nДля точной доставки, пожалуйста, поделитесь своим местоположением.\n\nНажмите на скрепку 📎 → Местоположение 📍 → Отправить текущее местоположение`;
+    const locationText = `Спасибо, ${customerName}! 📍\n\nДля точной доставки, пожалуйста, поделитесь своим местоположением.`;
     
     await sendMessage(phone_no_id, from, locationText);
 }
@@ -1330,19 +1335,15 @@ const optimizedMenuGroups = [
             productIds: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
         },
         {
-            title: "Теплые роллы",
+            title: "теплые",
             productIds: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
         },
         {
-            title: "Роллы без риса",
+            title: "без риса",
             productIds: ["136", "134", "135"]
         },
         {
-            title: "Круассаны",
-            productIds: ["93", "94", "92"]
-        },
-        {
-            title: "Сладкие роллы",
+            title: "сладкие",
             productIds: ["150", "139", "137", "138"]
         }
     ],
@@ -1356,6 +1357,10 @@ const optimizedMenuGroups = [
         {
             title: "Темпура роллы",
             productIds: ["19", "17", "15", "21", "20", "18", "16", "22"]
+        },
+        {
+            title: "Круассаны",
+            productIds: ["93", "94", "92"]
         }
     ],
     
@@ -1367,10 +1372,6 @@ const optimizedMenuGroups = [
                 "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
                 "77", "75", "73", "76", "74", "89", "88", "87", "90"
             ]
-        },
-        {
-            title: "Теплые сеты",
-            productIds: ["6", "3", "4", "1", "2", "5"]
         }
     ],
     
@@ -1383,6 +1384,10 @@ const optimizedMenuGroups = [
                 "106", "119", "124", "121", "108", "110", "116", "125", "114", 
                 "104", "107", "122", "126", "120", "115"
             ]
+        },
+        {
+            title: "Теплые сеты",
+            productIds: ["6", "3", "4", "1", "2", "5"]
         }
     ],
     
@@ -1416,8 +1421,8 @@ async function sendCatalog(phone_no_id, to) {
         }
         
         // Отправляем приветственное сообщение
-        const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
-        await sendMessage(phone_no_id, to, welcomeText);
+        // const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
+        // await sendMessage(phone_no_id, to, welcomeText);
         
         // Используем оптимизированные группы
         const categoryGroups = optimizedMenuGroups;
@@ -1508,6 +1513,9 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         } else if (categories.length === 3) {
             // Три категории
             headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
+        } else if (categories.length === 4) {
+            // Три категории
+            headerText = `🍣 ${categories[0].title}, ${categories[1].title}, ${categories[2].title} и ${categories[3].title}`;
         } else {
             // Много категорий - показываем первые две и количество остальных
             const remaining = categories.length - 2;
