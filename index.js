@@ -1183,7 +1183,7 @@ async function getAllProducts() {
         // Создаем мапу для быстрого поиска по ID
         const productsMap = {};
         products.forEach(product => {
-            productsMap[product.api_id] = {
+            productsMap[product.id] = {
                 id: product.id,
                 api_id: product.api_id,
                 title: product.title,
