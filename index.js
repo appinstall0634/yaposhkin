@@ -265,9 +265,18 @@ app.post("/webhook", async (req, res) => {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
-                        // Ответ от Flow когда мы его ждали
+                        if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
+                        // Пользователь отправил местоположение когда мы его ждали
                         console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
                         await handleFlowResponse(phone_no_id, from, message, body_param);
+                    } else {
+                        // await sendMessage(phone_no_id, from, ".");
+                        // Местоположение пришло неожиданно - игнорируем
+                        console.log("📍 Игнорируем неожиданное местоположение");
+                    }
+                        // Ответ от Flow когда мы его ждали
+                        // console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
+                        // await handleFlowResponse(phone_no_id, from, message, body_param);
                     } else if (message.interactive.type === "product_list_reply") {
                         // Ответ от каталога когда мы его ждали
                         console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
@@ -285,9 +294,18 @@ app.post("/webhook", async (req, res) => {
                         }
                     }
                 } else if (message.type === "order") {
-                    // Ответ от каталога в формате order когда мы его ждали
-                    console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
+                    if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
+                        // Пользователь отправил местоположение когда мы его ждали
+                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                     await handleCatalogOrderResponse(phone_no_id, from, message);
+                    } else {
+                        // await sendMessage(phone_no_id, from, ".");
+                        // Местоположение пришло неожиданно - игнорируем
+                        console.log("📍 Игнорируем неожиданное местоположение");
+                    }
+                    // Ответ от каталога в формате order когда мы его ждали
+                    // console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
+                    // await handleCatalogOrderResponse(phone_no_id, from, message);
                 } else {
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
