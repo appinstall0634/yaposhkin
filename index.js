@@ -251,32 +251,25 @@ app.post("/webhook", async (req, res) => {
 
             try {
                 // Проверяем тип сообщения и состояние ожидания
-                if (message.type === "location") {
-                    if (currentWaitingState === WAITING_STATES.LOCATION) {
-                        // Пользователь отправил местоположение когда мы его ждали
-                        console.log("📍 Обрабатываем ожидаемое местоположение");
-                        await handleLocationMessage(phone_no_id, from, message);
-                    } else {
-                        await sendMessage(phone_no_id, from, "Отправьте местоположение.");
-                        // Местоположение пришло неожиданно - игнорируем
-                        console.log("📍 Игнорируем неожиданное местоположение");
-                    }
-                } else if (message.type === "interactive") {
+                if (message.type === "location" && currentWaitingState === WAITING_STATES.LOCATION) {
+                    // if (currentWaitingState === WAITING_STATES.LOCATION) {
+                    //     // Пользователь отправил местоположение когда мы его ждали
+                    //     console.log("📍 Обрабатываем ожидаемое местоположение");
+                    //     await handleLocationMessage(phone_no_id, from, message);
+                    // } else {
+                    //     await sendMessage(phone_no_id, from, "Отправьте местоположение.");
+                    //     // Местоположение пришло неожиданно - игнорируем
+                    //     console.log("📍 Игнорируем неожиданное местоположение");
+                    // }
+                    console.log("📍 Обрабатываем ожидаемое местоположение");
+                    await handleLocationMessage(phone_no_id, from, message);
+                } else if (message.type === "interactive"  && currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
-                        if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
-                        // Пользователь отправил местоположение когда мы его ждали
+                        // Ответ от Flow когда мы его ждали
                         console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
                         await handleFlowResponse(phone_no_id, from, message, body_param);
-                    } else {
-                        // await sendMessage(phone_no_id, from, ".");
-                        // Местоположение пришло неожиданно - игнорируем
-                        console.log("📍 Игнорируем неожиданное местоположение");
-                    }
-                        // Ответ от Flow когда мы его ждали
-                        // console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
-                        // await handleFlowResponse(phone_no_id, from, message, body_param);
                     } else if (message.interactive.type === "product_list_reply") {
                         // Ответ от каталога когда мы его ждали
                         console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
@@ -293,23 +286,16 @@ app.post("/webhook", async (req, res) => {
                             console.log("⏳ Игнорируем сообщение - ожидаем другой тип ответа");
                         }
                     }
-                } else if (message.type === "order") {
-                    if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                        // Пользователь отправил местоположение когда мы его ждали
-                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
-                    await handleCatalogOrderResponse(phone_no_id, from, message);
-                    } else {
-                        // await sendMessage(phone_no_id, from, ".");
-                        // Местоположение пришло неожиданно - игнорируем
-                        console.log("📍 Игнорируем неожиданное местоположение");
-                    }
+                } else if (message.type === "order"  && currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
                     // Ответ от каталога в формате order когда мы его ждали
-                    // console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
-                    // await handleCatalogOrderResponse(phone_no_id, from, message);
-                } else {
+                    console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
+                    await handleCatalogOrderResponse(phone_no_id, from, message);
+                } else if (message.type === "message"){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
                     await handleIncomingMessage(phone_no_id, from, message);
+                }else{
+                    
                 }
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
