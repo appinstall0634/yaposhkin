@@ -4,6 +4,8 @@ const axios = require("axios");
 require('dotenv').config();
 const crypto = require('crypto');
 const fs = require('fs');
+const { MongoClient } = require('mongodb');
+
 const PORT = process.env.PORT || 3000;
 
 const app = express().use(body_parser.json());
@@ -18,11 +20,11 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '4265839023734503'; // newCustomer
 const ORDER_FLOW_ID = '708820881926236'; // order
 
-// Состояния пользователей для отслеживания процесса
-const userStates = new Map();
-
-// Добавляем новый Map для отслеживания состояния ожидания
-const userWaitingStates = new Map();
+// MongoDB конфигурация
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const DB_NAME = process.env.DB_NAME || 'whatsapp_bot';
+let db = null;
+let userStatesCollection = null;
 
 // Возможные состояния ожидания
 const WAITING_STATES = {
@@ -32,10 +34,179 @@ const WAITING_STATES = {
     CATALOG_ORDER: 'catalog_order'   // Ожидаем ответ от каталога
 };
 
-app.listen(PORT, () => {
-    console.log("webhook is listening");
-    console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
-});
+// Инициализация MongoDB
+async function initMongoDB() {
+    try {
+        console.log("🔗 Подключаемся к MongoDB...");
+        const client = new MongoClient(MONGODB_URI);
+        await client.connect();
+        
+        db = client.db(DB_NAME);
+        userStatesCollection = db.collection('user_states');
+        
+        // Создаем индекс по phone для быстрого поиска
+        await userStatesCollection.createIndex({ phone: 1 });
+        
+        // TTL индекс для автоматического удаления старых записей (24 часа)
+        await userStatesCollection.createIndex(
+            { updatedAt: 1 }, 
+            { expireAfterSeconds: 86400 }
+        );
+        
+        console.log("✅ MongoDB подключена успешно");
+        console.log(`📊 База данных: ${DB_NAME}`);
+        console.log(`📋 Коллекция: user_states`);
+        
+    } catch (error) {
+        console.error("❌ Ошибка подключения к MongoDB:", error);
+        process.exit(1);
+    }
+}
+
+// Функции для работы с состояниями пользователей в MongoDB
+
+// Получение состояния пользователя
+async function getUserState(phone) {
+    try {
+        const userDoc = await userStatesCollection.findOne({ phone });
+        return userDoc?.state || null;
+    } catch (error) {
+        console.error(`❌ Ошибка получения состояния пользователя ${phone}:`, error);
+        return null;
+    }
+}
+
+// Сохранение состояния пользователя
+async function setUserState(phone, state) {
+    try {
+        const now = new Date();
+        await userStatesCollection.updateOne(
+            { phone },
+            {
+                $set: {
+                    phone,
+                    state,
+                    updatedAt: now
+                },
+                $setOnInsert: {
+                    createdAt: now
+                }
+            },
+            { upsert: true }
+        );
+        console.log(`💾 Состояние пользователя ${phone} сохранено`);
+    } catch (error) {
+        console.error(`❌ Ошибка сохранения состояния пользователя ${phone}:`, error);
+    }
+}
+
+// Удаление состояния пользователя
+async function deleteUserState(phone) {
+    try {
+        await userStatesCollection.deleteOne({ phone });
+        console.log(`🗑️ Состояние пользователя ${phone} удалено`);
+    } catch (error) {
+        console.error(`❌ Ошибка удаления состояния пользователя ${phone}:`, error);
+    }
+}
+
+// Получение состояния ожидания пользователя
+async function getUserWaitingState(phone) {
+    try {
+        const userDoc = await userStatesCollection.findOne({ phone });
+        return userDoc?.waitingState || WAITING_STATES.NONE;
+    } catch (error) {
+        console.error(`❌ Ошибка получения состояния ожидания пользователя ${phone}:`, error);
+        return WAITING_STATES.NONE;
+    }
+}
+
+// Установка состояния ожидания пользователя
+async function setUserWaitingState(phone, waitingState) {
+    try {
+        const now = new Date();
+        console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${waitingState}`);
+        
+        await userStatesCollection.updateOne(
+            { phone },
+            {
+                $set: {
+                    phone,
+                    waitingState,
+                    updatedAt: now
+                },
+                $setOnInsert: {
+                    createdAt: now
+                }
+            },
+            { upsert: true }
+        );
+    } catch (error) {
+        console.error(`❌ Ошибка установки состояния ожидания пользователя ${phone}:`, error);
+    }
+}
+
+// Очистка состояния ожидания пользователя
+async function clearUserWaitingState(phone) {
+    try {
+        console.log(`✅ Очищаем состояние ожидания для ${phone}`);
+        
+        await userStatesCollection.updateOne(
+            { phone },
+            {
+                $unset: { waitingState: "" },
+                $set: { updatedAt: new Date() }
+            }
+        );
+    } catch (error) {
+        console.error(`❌ Ошибка очистки состояния ожидания пользователя ${phone}:`, error);
+    }
+}
+
+// Получение статистики состояний
+async function getUserStatesStats() {
+    try {
+        const totalUsers = await userStatesCollection.countDocuments();
+        const waitingStates = await userStatesCollection.aggregate([
+            {
+                $group: {
+                    _id: "$waitingState",
+                    count: { $sum: 1 }
+                }
+            }
+        ]).toArray();
+        
+        return {
+            totalUsers,
+            waitingStates: waitingStates.reduce((acc, item) => {
+                acc[item._id || 'none'] = item.count;
+                return acc;
+            }, {})
+        };
+    } catch (error) {
+        console.error("❌ Ошибка получения статистики:", error);
+        return { totalUsers: 0, waitingStates: {} };
+    }
+}
+
+// Запуск сервера
+async function startServer() {
+    try {
+        // Инициализируем MongoDB
+        await initMongoDB();
+        
+        app.listen(PORT, () => {
+            console.log("webhook is listening");
+            console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error("❌ Ошибка запуска сервера:", error);
+        process.exit(1);
+    }
+}
+
+// Запускаем сервер
+startServer();
 
 // Верификация webhook
 app.get("/webhook", (req, res) => {
@@ -74,8 +245,8 @@ app.post("/webhook", async (req, res) => {
             console.log("message type:", message.type);
             console.log("message:", JSON.stringify(message, null, 2));
 
-            // Проверяем текущее состояние ожидания пользователя
-            const currentWaitingState = userWaitingStates.get(from) || WAITING_STATES.NONE;
+            // Проверяем текущее состояние ожидания пользователя из MongoDB
+            const currentWaitingState = await getUserWaitingState(from);
             console.log(`👤 Текущее состояние ожидания для ${from}: ${currentWaitingState}`);
 
             try {
@@ -94,25 +265,13 @@ app.post("/webhook", async (req, res) => {
                     console.log("Interactive message type:", message.interactive.type);
                     
                     if (message.interactive.type === "nfm_reply") {
-                        // if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
-                            // Ответ от Flow когда мы его ждали
-                            console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
-                            await handleFlowResponse(phone_no_id, from, message, body_param);
-                        // } else {
-                        //     await sendMessage(phone_no_id, from, "Заполните форму.");
-                        //     // Flow ответ пришел неожиданно - игнорируем
-                        //     console.log("🔄 Игнорируем неожиданный ответ от Flow");
-                        // }
+                        // Ответ от Flow когда мы его ждали
+                        console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
+                        await handleFlowResponse(phone_no_id, from, message, body_param);
                     } else if (message.interactive.type === "product_list_reply") {
-                        // if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                            // Ответ от каталога когда мы его ждали
-                            console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
-                            await handleCatalogResponse(phone_no_id, from, message);
-                        // } else {
-                        //     await sendMessage(phone_no_id, from, "Выберите блюда.");
-                        //     // Ответ от каталога пришел неожиданно - игнорируем
-                        //     console.log("🛒 Игнорируем неожиданный ответ от каталога");
-                        // }
+                        // Ответ от каталога когда мы его ждали
+                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
+                        await handleCatalogResponse(phone_no_id, from, message);
                     } else if (message.interactive.type === "button_reply") {
                         // Ответ от кнопки - обрабатываем всегда
                         console.log("🔘 Обрабатываем ответ от кнопки");
@@ -126,25 +285,13 @@ app.post("/webhook", async (req, res) => {
                         }
                     }
                 } else if (message.type === "order") {
-                    // if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
-                        // Ответ от каталога в формате order когда мы его ждали
-                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
-                        await handleCatalogOrderResponse(phone_no_id, from, message);
-                    // } else {
-                    //     await sendMessage(phone_no_id, from, "Выберите блюда и отправьте.");
-                    //     // Order пришел неожиданно - игнорируем
-                    //     console.log("🛒 Игнорируем неожиданный order ответ");
-                    // }
+                    // Ответ от каталога в формате order когда мы его ждали
+                    console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
+                    await handleCatalogOrderResponse(phone_no_id, from, message);
                 } else {
                     // Любое другое сообщение
-                    // if (currentWaitingState === WAITING_STATES.NONE) {
-                        // Принимаем обычные сообщения только если не ждем специфичного ответа
-                        console.log("📝 Обрабатываем обычное сообщение");
-                        await handleIncomingMessage(phone_no_id, from, message);
-                    // } else {
-                        // Игнорируем обычные сообщения если ждем специфичного ответа
-                        console.log(`⏳ Игнорируем текстовое сообщение - ожидаем ${currentWaitingState}`);
-                    // }
+                    console.log("📝 Обрабатываем обычное сообщение");
+                    await handleIncomingMessage(phone_no_id, from, message);
                 }
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
@@ -157,21 +304,6 @@ app.post("/webhook", async (req, res) => {
     }
 });
 
-// Функции для управления состояниями ожидания
-function setUserWaitingState(phone, state) {
-    console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${state}`);
-    userWaitingStates.set(phone, state);
-}
-
-function clearUserWaitingState(phone) {
-    console.log(`✅ Очищаем состояние ожидания для ${phone}`);
-    userWaitingStates.delete(phone);
-}
-
-function getUserWaitingState(phone) {
-    return userWaitingStates.get(phone) || WAITING_STATES.NONE;
-}
-
 // Обработка местоположения
 async function handleLocationMessage(phone_no_id, from, message) {
     try {
@@ -183,13 +315,13 @@ async function handleLocationMessage(phone_no_id, from, message) {
         
         console.log(`📍 Получено местоположение: ${latitude}, ${longitude}`);
         
-        // Получаем состояние пользователя
-        const userState = userStates.get(from);
+        // Получаем состояние пользователя из MongoDB
+        const userState = await getUserState(from);
         
         if (!userState) {
             console.log("❌ Состояние пользователя не найдено");
             await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте заново оформить заказ.");
-            clearUserWaitingState(from);
+            await clearUserWaitingState(from);
             return;
         }
         
@@ -201,7 +333,7 @@ async function handleLocationMessage(phone_no_id, from, message) {
     } catch (error) {
         console.error("❌ Ошибка обработки местоположения:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при сохранении адреса. Попробуйте еще раз.");
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -250,14 +382,16 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         console.log("✅ Клиент успешно обновлен:", updateResponse.data);
         
-        // ОБНОВЛЯЕМ состояние вместо очистки - добавляем информацию о том, что местоположение обработано
-        userStates.set(from, {
+        // ОБНОВЛЯЕМ состояние в MongoDB вместо очистки - добавляем информацию о том, что местоположение обработано
+        const updatedState = {
             ...userState,
             order_type: 'delivery', // Принудительно устанавливаем delivery
             delivery_choice: 'new', // Новый адрес
             location_processed: true, // Флаг что местоположение обработано
             new_address: userState.delivery_address // Сохраняем адрес
-        });
+        };
+        
+        await setUserState(from, updatedState);
         
         // Отправляем подтверждение
         if (userState.flow_type === 'new_customer') {
@@ -269,13 +403,11 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         }
         
         // Меняем состояние ожидания на ожидание заказа из каталога
-        setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+        await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
 
         console.log(`after location userState is setUserWaitingState ${from} : ${WAITING_STATES.CATALOG_ORDER}`)
         
-        
-            await sendCatalog(phone_no_id, from);
-     
+        await sendCatalog(phone_no_id, from);
         
     } catch (error) {
         console.error("❌ Ошибка обновления клиента:", error);
@@ -289,8 +421,8 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         await sendMessage(phone_no_id, from, errorMessage);
         // Очищаем состояние только при ошибке
-        userStates.delete(from);
-        clearUserWaitingState(from);
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -344,7 +476,7 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
         }
 
         // Устанавливаем состояние ожидания ответа от Flow
-        setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
+        await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
 
     } catch (error) {
         console.error('❌ Ошибка проверки клиента:', error);
@@ -360,7 +492,7 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
             
             console.log('🆕 Ошибка API - отправляем регистрационный Flow');
             await sendNewCustomerFlow(phone_no_id, from, branches);
-            setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
+            await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
         } catch (fallbackError) {
             console.error('❌ Критическая ошибка получения филиалов:', fallbackError);
             await sendMessage(phone_no_id, from, "Извините, временные технические проблемы. Попробуйте позже.");
@@ -492,16 +624,15 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
             console.log("❓ Неизвестный тип Flow, отправляем каталог");
             await sendMessage(phone_no_id, from, "Спасибо! Выберите блюда из каталога:");
             
-            setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+            await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
             
-                await sendCatalog(phone_no_id, from);
-
+            await sendCatalog(phone_no_id, from);
         }
 
     } catch (error) {
         console.error("Ошибка обработки Flow ответа:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке формы. Попробуйте еще раз.");
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -512,15 +643,17 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
 
         // Если выбрана доставка и есть новый адрес - запрашиваем местоположение
         if (data.order_type === 'delivery' && data.delivery_address) {
-            // Сохраняем состояние для ожидания местоположения
-            userStates.set(from, {
+            // Сохраняем состояние для ожидания местоположения в MongoDB
+            const userState = {
                 flow_type: 'new_customer',
                 customer_name: data.customer_name,
                 delivery_address: data.delivery_address
-            });
+            };
+            
+            await setUserState(from, userState);
 
             // Устанавливаем состояние ожидания местоположения
-            setUserWaitingState(from, WAITING_STATES.LOCATION);
+            await setUserWaitingState(from, WAITING_STATES.LOCATION);
 
             // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
@@ -532,7 +665,7 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
     } catch (error) {
         console.error('❌ Ошибка регистрации:', error);
         await sendMessage(phone_no_id, from, 'Извините, произошла ошибка при регистрации. Попробуйте позже.');
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -563,17 +696,15 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         await sendMessage(phone_no_id, from, confirmText);
         
         // Устанавливаем состояние ожидания заказа из каталога
-        setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+        await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
         
-        // Отправляем каталог через 2 секунды
-
-            await sendCatalog(phone_no_id, from);
-
+        // Отправляем каталог
+        await sendCatalog(phone_no_id, from);
         
     } catch (error) {
         console.error("❌ Ошибка регистрации без местоположения:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при регистрации. Попробуйте еще раз.");
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -582,22 +713,24 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
     try {
         console.log('🛒 Обрабатываем заказ существующего клиента:', data);
         
-        // Сохраняем данные заказа для дальнейшего использования
-        userStates.set(from, {
+        // Сохраняем данные заказа для дальнейшего использования в MongoDB
+        const userState = {
             flow_type: 'existing_customer',
             order_type: data.order_type,
             delivery_choice: data.delivery_choice,
             new_address: data.new_address,
             branch: data.branch,
             customer_name: data.customer_name
-        });
+        };
+        
+        await setUserState(from, userState);
         
         // Проверяем что выбрал клиент
         if (data.order_type === 'delivery' && data.delivery_choice === 'new' && data.new_address) {
             console.log('📍 Клиент выбрал доставку с новым адресом:', data.new_address);
             
             // Обновляем состояние для запроса местоположения, НО СОХРАНЯЕМ ВСЕ ДАННЫЕ
-            userStates.set(from, {
+            const updatedUserState = {
                 flow_type: 'existing_customer',
                 customer_name: data.customer_name || 'Клиент',
                 delivery_address: data.new_address,
@@ -606,10 +739,12 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
                 delivery_choice: data.delivery_choice,
                 new_address: data.new_address,
                 branch: data.branch
-            });
+            };
+            
+            await setUserState(from, updatedUserState);
             
             // Устанавливаем состояние ожидания местоположения
-            setUserWaitingState(from, WAITING_STATES.LOCATION);
+            await setUserWaitingState(from, WAITING_STATES.LOCATION);
             
             // Отправляем запрос местоположения
             await sendLocationRequest(phone_no_id, from, data.customer_name);
@@ -628,18 +763,16 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             await sendMessage(phone_no_id, from, confirmText);
             
             // Устанавливаем состояние ожидания заказа из каталога
-            setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+            await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
             
-            // Отправляем каталог через 1 секунду
-
-                await sendCatalog(phone_no_id, from);
-
+            // Отправляем каталог
+            await sendCatalog(phone_no_id, from);
         }
         
     } catch (error) {
         console.error('❌ Ошибка обработки заказа:', error);
         await sendMessage(phone_no_id, from, 'Извините, произошла ошибка. Попробуйте еще раз.');
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -704,8 +837,8 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         console.log("📦 Товары для заказа:", orderItems);
         orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n\n`;
         
-        // Получаем состояние пользователя для определения типа заказа
-        const userState = userStates.get(from);
+        // Получаем состояние пользователя для определения типа заказа из MongoDB
+        const userState = await getUserState(from);
         
         // Рассчитываем доставку и оформляем заказ
         await calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, userState);
@@ -713,7 +846,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
     } catch (error) {
         console.error("Ошибка обработки order ответа каталога:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке заказа. Попробуйте еще раз.");
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -723,11 +856,11 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         console.log("=== РАСЧЕТ ДОСТАВКИ И ОФОРМЛЕНИЕ ЗАКАЗА ===");
         console.log("User state from parameter:", userState);
         
-        // Если userState пустой, пытаемся получить из Map
+        // Если userState пустой, пытаемся получить из MongoDB
         if (!userState) {
-            console.log("⚠️ User state is null, trying to get from Map");
-            userState = userStates.get(from);
-            console.log("User state from Map:", userState);
+            console.log("⚠️ User state is null, trying to get from MongoDB");
+            userState = await getUserState(from);
+            console.log("User state from MongoDB:", userState);
         }
         
         // Если все еще нет состояния, создаем базовое для самовывоза
@@ -795,8 +928,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             if (!tempLat || !tempLon) {
                 console.log("❌ Нет координат адреса для доставки");
                 await sendMessage(phone_no_id, from, "❌ Ошибка: не удается определить координаты адреса доставки. Попробуйте указать адрес заново или обратитесь к менеджеру.");
-                userStates.delete(from);
-                clearUserWaitingState(from);
+                await deleteUserState(from);
+                await clearUserWaitingState(from);
                 return;
             }
             
@@ -821,15 +954,15 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     // Доставка недоступна - отправляем ошибку вместо переключения
                     console.log("❌ Доставка недоступна по указанному адресу");
                     await sendMessage(phone_no_id, from, "❌ К сожалению, доставка по этому адресу недоступна. Попробуйте указать другой адрес или обратитесь к менеджеру.");
-                    userStates.delete(from);
-                    clearUserWaitingState(from);
+                    await deleteUserState(from);
+                    await clearUserWaitingState(from);
                     return; 
                 }
             } catch (deliveryError) {
                 console.error("❌ Ошибка запроса доставки:", deliveryError);
                 await sendMessage(phone_no_id, from, "❌ Произошла ошибка при расчете стоимости доставки. Попробуйте позже или обратитесь к менеджеру.");
-                userStates.delete(from);
-                clearUserWaitingState(from);
+                await deleteUserState(from);
+                await clearUserWaitingState(from);
                 return;
             }
         } else {
@@ -845,8 +978,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                 } else {
                     console.log("❌ Информация о выбранном филиале не найдена");
                     await sendMessage(phone_no_id, from, "❌ Ошибка: выбранный филиал недоступен. Попробуйте заново или обратитесь к менеджеру.");
-                    userStates.delete(from);
-                    clearUserWaitingState(from);
+                    await deleteUserState(from);
+                    await clearUserWaitingState(from);
                     return;
                 }
             } else {
@@ -862,15 +995,15 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     } else {
                         console.log("❌ Нет доступных филиалов");
                         await sendMessage(phone_no_id, from, "❌ Извините, в данный момент нет доступных филиалов для самовывоза. Обратитесь к менеджеру.");
-                        userStates.delete(from);
-                        clearUserWaitingState(from);
+                        await deleteUserState(from);
+                        await clearUserWaitingState(from);
                         return;
                     }
                 } catch (error) {
                     console.error("❌ Ошибка получения списка филиалов:", error);
                     await sendMessage(phone_no_id, from, "❌ Ошибка получения информации о филиалах. Попробуйте позже или обратитесь к менеджеру.");
-                    userStates.delete(from);
-                    clearUserWaitingState(from);
+                    await deleteUserState(from);
+                    await clearUserWaitingState(from);
                     return;
                 }
             }
@@ -880,8 +1013,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         if (!locationId) {
             console.log("❌ Не удалось определить локацию для заказа");
             await sendMessage(phone_no_id, from, "❌ Ошибка определения места выполнения заказа. Обратитесь к менеджеру.");
-            userStates.delete(from);
-            clearUserWaitingState(from);
+            await deleteUserState(from);
+            await clearUserWaitingState(from);
             return;
         }
         
@@ -907,14 +1040,14 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         
         // Очищаем состояние ТОЛЬКО после успешного оформления заказа
-        userStates.delete(from);
-        clearUserWaitingState(from);
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
         await sendMessage(phone_no_id, from, "❌ Произошла критическая ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
-        userStates.delete(from);
-        clearUserWaitingState(from);
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -1154,12 +1287,12 @@ async function handleCatalogResponse(phone_no_id, from, message) {
         await sendMessage(phone_no_id, from, "Спасибо за выбор! Обрабатываем ваш заказ...");
         
         // Завершаем процесс заказа
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
         
     } catch (error) {
         console.error("Ошибка обработки ответа каталога:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при обработке заказа. Попробуйте еще раз.");
-        clearUserWaitingState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -1285,34 +1418,6 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     }
 }
 
-// // Отправка каталога
-// async function sendCatalog(phone_no_id, to) {
-//     console.log("=== ОТПРАВКА КАТАЛОГА ===");
-    
-//     const catalogData = {
-//         messaging_product: "whatsapp",
-//         to: to,
-//         type: "interactive",
-//         interactive: {
-//             type: "catalog_message",
-//             body: {
-//                 text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
-//             },
-//             footer: {
-//                 text: "Доставка 30-40 минут"
-//             },
-//             action: {
-//                 name: "catalog_message"
-//             }
-//         }
-//     };
-
-//     await sendWhatsAppMessage(phone_no_id, catalogData);
-// }
-
-// ЗАМЕНИТЕ ЭТУ ЧАСТЬ В ВАШЕМ КОДЕ:
-// Найдите секцию с menuCategories и замените её на это:
-
 // Оптимизированные группы товаров (6 сообщений вместо 12)
 const optimizedMenuGroups = [
     // Группа 1: Роллы (первые 30)
@@ -1407,7 +1512,6 @@ const optimizedMenuGroups = [
     ]
 ];
 
-// ЗАМЕНИТЕ ФУНКЦИЮ sendCatalog НА ЭТУ:
 async function sendCatalog(phone_no_id, to) {
     console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
     
@@ -1418,10 +1522,6 @@ async function sendCatalog(phone_no_id, to) {
             console.error("❌ CATALOG_ID не найден в переменных окружения");
             throw new Error("CATALOG_ID не настроен");
         }
-        
-        // Отправляем приветственное сообщение
-        // const welcomeText = "🍣 Добро пожаловать в Yaposhkin Rolls!\n\nСейчас отправлю вам наш каталог. Выберите понравившиеся блюда! ❤️";
-        // await sendMessage(phone_no_id, to, welcomeText);
         
         // Используем оптимизированные группы
         const categoryGroups = optimizedMenuGroups;
@@ -1446,15 +1546,9 @@ async function sendCatalog(phone_no_id, to) {
             console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
             await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
-            
-            // // Небольшая задержка между сообщениями для лучшего UX
-            // if (i < categoryGroups.length - 1) {
-            //     await new Promise(resolve => setTimeout(resolve, 1000));
-            // }
         }
         
         // Отправляем финальное сообщение
-        // await new Promise(resolve => setTimeout(resolve, 2000));
         const finalText = `Выберите понравившиеся блюда из любой категории и добавьте в корзину.`;
         await sendMessage(phone_no_id, to, finalText);
         
@@ -1487,7 +1581,6 @@ async function sendCatalog(phone_no_id, to) {
     }
 }
 
-// ОБНОВИТЕ ФУНКЦИЮ sendProductListWithSections для лучших заголовков:
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
     try {
         // Формируем секции для WhatsApp
@@ -1513,7 +1606,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
             // Три категории
             headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
         } else if (categories.length === 4) {
-            // Три категории
+            // Четыре категории
             headerText = `🍣 ${categories[0].title}, ${categories[1].title}, ${categories[2].title} и ${categories[3].title}`;
         } else {
             // Много категорий - показываем первые две и количество остальных
@@ -1537,7 +1630,6 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                     text: headerText
                 },
                 body: {
-                    // text: `${totalProducts} товаров\nВыберите блюда:`
                     text: `Выберите блюда:`
                 },
                 footer: {
@@ -2171,6 +2263,112 @@ function getStatusText(status) {
     return statusMap[status.toLowerCase()] || `Статус: ${status}`;
 }
 
+// Endpoint для получения статистики состояний пользователей
+app.get("/stats", async (req, res) => {
+    try {
+        console.log("=== ЗАПРОС СТАТИСТИКИ ===");
+        
+        const stats = await getUserStatesStats();
+        
+        console.log("📊 Статистика состояний:", stats);
+        
+        res.status(200).json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            database: {
+                connected: !!db,
+                name: DB_NAME
+            },
+            statistics: stats
+        });
+        
+    } catch (error) {
+        console.error("❌ Ошибка получения статистики:", error);
+        res.status(500).json({
+            success: false,
+            error: "Ошибка получения статистики"
+        });
+    }
+});
+
+// Endpoint для очистки старых состояний пользователей
+app.delete("/cleanup", async (req, res) => {
+    try {
+        console.log("=== ОЧИСТКА СТАРЫХ СОСТОЯНИЙ ===");
+        
+        // Удаляем состояния старше 24 часов
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        const result = await userStatesCollection.deleteMany({
+            updatedAt: { $lt: oneDayAgo }
+        });
+        
+        console.log(`🗑️ Удалено ${result.deletedCount} старых состояний`);
+        
+        res.status(200).json({
+            success: true,
+            message: `Удалено ${result.deletedCount} старых состояний`,
+            deletedCount: result.deletedCount
+        });
+        
+    } catch (error) {
+        console.error("❌ Ошибка очистки состояний:", error);
+        res.status(500).json({
+            success: false,
+            error: "Ошибка очистки состояний"
+        });
+    }
+});
+
+// Главная страница
 app.get("/", (req, res) => {
-    res.status(200).send("hello this is webhook setup");
+    res.status(200).json({
+        message: "WhatsApp Bot с MongoDB",
+        status: "active",
+        version: "2.0.0",
+        database: {
+            connected: !!db,
+            name: DB_NAME
+        },
+        features: [
+            "MongoDB для состояний пользователей",
+            "Автоматическое удаление старых записей",
+            "Статистика использования",
+            "Flow обработка",
+            "Каталог товаров",
+            "Уведомления о заказах"
+        ],
+        endpoints: {
+            webhook: "/webhook",
+            flow: "/flow",
+            orderStatus: "/order-status",
+            stats: "/stats",
+            cleanup: "/cleanup"
+        }
+    });
+});
+
+// Graceful shutdown для MongoDB
+process.on('SIGINT', async () => {
+    console.log('\n🛑 Получен сигнал завершения...');
+    
+    if (db) {
+        console.log('📦 Закрываем соединение с MongoDB...');
+        await db.client.close();
+        console.log('✅ Соединение с MongoDB закрыто');
+    }
+    
+    console.log('👋 Сервер завершен');
+    process.exit(0);
+});
+
+// Обработка ошибок подключения к MongoDB
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Необработанное отклонение промиса:', reason);
+    console.error('В промисе:', promise);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('❌ Необработанное исключение:', error);
+    process.exit(1);
 });
