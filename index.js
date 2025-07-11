@@ -290,12 +290,12 @@ app.post("/webhook", async (req, res) => {
                     // Ответ от каталога в формате order когда мы его ждали
                     console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                     await handleCatalogOrderResponse(phone_no_id, from, message);
-                } else if (message.type === "message"){
+                } else if (message.type === "text"){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
                     await handleIncomingMessage(phone_no_id, from, message);
                 }else{
-                    
+
                 }
             } catch (error) {
                 console.error("Ошибка обработки сообщения:", error);
