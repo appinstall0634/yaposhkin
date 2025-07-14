@@ -324,10 +324,12 @@ app.post("/webhook", async (req, res) => {
                     // Ответ от каталога в формате order когда мы его ждали
                     console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                     await handleCatalogOrderResponse(phone_no_id, from, message);
-                }  else if (message.type === "text" && currentWaitingState === WAITING_STATES.PAYMENT_CONFIRMATION) {
-            // Подтверждение оплаты
-            console.log("💳 Обрабатываем подтверждение оплаты");
-            await handlePaymentConfirmation(phone_no_id, from, message);
+                }  else if (message.type === "interactive" && 
+                   message.interactive.type === "button_reply" && 
+                   currentWaitingState === WAITING_STATES.PAYMENT_CONFIRMATION) {
+            // Кнопки подтверждения заказа
+            console.log("🔘 Обрабатываем кнопку подтверждения заказа");
+            await handleOrderConfirmationButton(phone_no_id, from, message);
             
         }
                 else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
@@ -383,6 +385,31 @@ async function handlePaymentConfirmation(phone_no_id, from, message) {
         console.error("❌ Ошибка обработки подтверждения оплаты:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
         await clearUserWaitingState(from);
+    }
+}
+
+async function handleOrderConfirmationButton(phone_no_id, from, message) {
+    try {
+        const buttonId = message.interactive.button_reply.id;
+        console.log("🔘 Нажата кнопка:", buttonId);
+        
+        if (buttonId === "confirm_order") {
+            // Подтверждение заказа
+            await handlePaymentConfirmation(phone_no_id, from, message);
+        } else if (buttonId === "cancel_order") {
+            // Отмена заказа
+            console.log("❌ Заказ отменен пользователем");
+            await sendMessage(phone_no_id, from, "❌ Заказ отменен. Если захотите заказать что-то еще, напишите нам!");
+            await deleteUserState(from);
+            await clearUserWaitingState(from);
+        } else {
+            console.log("❓ Неизвестная кнопка:", buttonId);
+            await sendMessage(phone_no_id, from, "Выберите одну из предложенных опций.");
+        }
+        
+    } catch (error) {
+        console.error("❌ Ошибка обработки кнопки подтверждения:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте еще раз.");
     }
 }
 
@@ -1177,6 +1204,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             };
             await setUserOrder(from, userOrders);
             sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
+            await sendOrderConfirmationButtons(phone_no_id, from, "После оплаты подтвердите заказ:");
     } else {
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
@@ -1192,6 +1220,56 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         await clearUserWaitingState(from);
     }
 
+}
+
+async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
+    try {
+        const buttonsMessage = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "button",
+                header: {
+                    type: "text",
+                    text: "📋 Подтверждение заказа"
+                },
+                body: {
+                    text: orderSummary + "\n\nПодтвердите оформление заказа:"
+                },
+                footer: {
+                    text: "Yaposhkin Rolls"
+                },
+                action: {
+                    buttons: [
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "confirm_order",
+                                title: "✅ Подтвердить"
+                            }
+                        },
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "cancel_order",
+                                title: "❌ Отменить"
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+        
+        await sendWhatsAppMessage(phone_no_id, buttonsMessage);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки кнопок подтверждения:", error);
+        
+        // Fallback - отправляем обычное сообщение
+        const fallbackMessage = orderSummary + "\n\nОтправьте любое сообщение для подтверждения заказа или напишите 'отмена' для отмены.";
+        await sendMessage(phone_no_id, to, fallbackMessage);
+    }
 }
 
 async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
