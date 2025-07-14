@@ -1180,13 +1180,14 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
     } else {
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
     }
         
         
         
         // Очищаем состояние ТОЛЬКО после успешного оформления заказа
-        await deleteUserState(from);
-        await clearUserWaitingState(from);
+       
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
