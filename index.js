@@ -25,13 +25,15 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'whatsapp_bot';
 let db = null;
 let userStatesCollection = null;
+let userDataForOrderCollection = null;
 
 // Возможные состояния ожидания
 const WAITING_STATES = {
     NONE: 'none',                    // Принимаем любые сообщения
     FLOW_RESPONSE: 'flow_response',  // Ожидаем ответ от Flow
     LOCATION: 'location',            // Ожидаем местоположение
-    CATALOG_ORDER: 'catalog_order'   // Ожидаем ответ от каталога
+    CATALOG_ORDER: 'catalog_order',   // Ожидаем ответ от каталога
+    PAYMENT_CONFIRMATION: 'payment_confirmation'
 };
 
 // Инициализация MongoDB
@@ -43,12 +45,19 @@ async function initMongoDB() {
         
         db = client.db(DB_NAME);
         userStatesCollection = db.collection('user_states');
+        userDataForOrderCollection = db.collection('user_orders');
         
         // Создаем индекс по phone для быстрого поиска
         await userStatesCollection.createIndex({ phone: 1 });
+        await userDataForOrderCollection.createIndex({ phone: 1 });
         
         // TTL индекс для автоматического удаления старых записей (24 часа)
         await userStatesCollection.createIndex(
+            { updatedAt: 1 }, 
+            { expireAfterSeconds: 86400 }
+        );
+
+        await userDataForOrderCollection.createIndex(
             { updatedAt: 1 }, 
             { expireAfterSeconds: 86400 }
         );
@@ -72,6 +81,16 @@ async function getUserState(phone) {
         return userDoc?.state || null;
     } catch (error) {
         console.error(`❌ Ошибка получения состояния пользователя ${phone}:`, error);
+        return null;
+    }
+}
+
+async function getUserOrders(phone) {
+    try {
+        const userDoc = await userDataForOrderCollection.findOne({ phone });
+        return userDoc?.state || null;
+    } catch (error) {
+        console.error(`❌ Ошибка получения заказа пользователя ${phone}:`, error);
         return null;
     }
 }
@@ -100,7 +119,39 @@ async function setUserState(phone, state) {
     }
 }
 
+async function setUserOrder(phone, state) {
+    try {
+        const now = new Date();
+        await userDataForOrderCollection.updateOne(
+            { phone },
+            {
+                $set: {
+                    phone,
+                    state,
+                    updatedAt: now
+                },
+                $setOnInsert: {
+                    createdAt: now
+                }
+            },
+            { upsert: true }
+        );
+        console.log(`💾 Заказы пользователя ${phone} сохранено`);
+    } catch (error) {
+        console.error(`❌ Ошибка сохранения состояния пользователя ${phone}:`, error);
+    }
+}
+
 // Удаление состояния пользователя
+async function deleteUserOrders(phone) {
+    try {
+        await userDataForOrderCollection.deleteOne({ phone });
+        console.log(`🗑️ Заказы пользователя ${phone} удалено`);
+    } catch (error) {
+        console.error(`❌ Ошибка удаления заказов пользователя ${phone}:`, error);
+    }
+}
+
 async function deleteUserState(phone) {
     try {
         await userStatesCollection.deleteOne({ phone });
@@ -265,32 +316,21 @@ app.post("/webhook", async (req, res) => {
                     await handleLocationMessage(phone_no_id, from, message);
                 } else if (message.type === "interactive"  && currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
                     console.log("Interactive message type:", message.interactive.type);
-                    
-                    if (message.interactive.type === "nfm_reply") {
                         // Ответ от Flow когда мы его ждали
                         console.log("🔄 Обрабатываем ожидаемый ответ от Flow");
                         await handleFlowResponse(phone_no_id, from, message, body_param);
-                    } else if (message.interactive.type === "product_list_reply") {
-                        // Ответ от каталога когда мы его ждали
-                        console.log("🛒 Обрабатываем ожидаемый ответ от каталога (product_list)");
-                        await handleCatalogResponse(phone_no_id, from, message);
-                    } else if (message.interactive.type === "button_reply") {
-                        // Ответ от кнопки - обрабатываем всегда
-                        console.log("🔘 Обрабатываем ответ от кнопки");
-                        await handleButtonResponse(phone_no_id, from, message);
-                    } else {
-                        console.log("❓ Неизвестный тип interactive сообщения:", message.interactive.type);
-                        if (currentWaitingState === WAITING_STATES.NONE) {
-                            await handleIncomingMessage(phone_no_id, from, message);
-                        } else {
-                            console.log("⏳ Игнорируем сообщение - ожидаем другой тип ответа");
-                        }
-                    }
+                    
                 } else if (message.type === "order"  && currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
                     // Ответ от каталога в формате order когда мы его ждали
                     console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                     await handleCatalogOrderResponse(phone_no_id, from, message);
-                } else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
+                }  else if (message.type === "text" && currentWaitingState === WAITING_STATES.PAYMENT_CONFIRMATION) {
+            // Подтверждение оплаты
+            console.log("💳 Обрабатываем подтверждение оплаты");
+            await handlePaymentConfirmation(phone_no_id, from, message);
+            
+        }
+                else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
                     await handleIncomingMessage(phone_no_id, from, message);
@@ -307,6 +347,44 @@ app.post("/webhook", async (req, res) => {
         }
     }
 });
+
+
+async function handlePaymentConfirmation(phone_no_id, from, message) {
+    try {
+        console.log("💳 Получено подтверждение оплаты");
+        
+        const userOrders = await getUserOrders(from);
+        if (!userOrders) {
+            console.log("❌ Нет ожидающего оплаты заказа");
+            await sendMessage(phone_no_id, from, "Не найден заказ, ожидающий оплаты. Попробуйте оформить заказ заново.");
+            await clearUserWaitingState(from);
+            return;
+        }
+        
+        await sendMessage(phone_no_id, from, "✅ Спасибо! Оформляем ваш заказ...");
+        
+        // Оформляем заказ с сохраненными данными
+        await submitOrder(
+            phone_no_id, 
+            from, 
+            userOrders.orderItems, 
+            userOrders.customerData, 
+            userOrders.locationId, 
+            userOrders.locationTitle, 
+            userOrders.orderType, 
+            userOrders.finalAmount
+        );
+        
+        // Очищаем состояние
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
+        
+    } catch (error) {
+        console.error("❌ Ошибка обработки подтверждения оплаты:", error);
+        await sendMessage(phone_no_id, from, "Произошла ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
+        await clearUserWaitingState(from);
+    }
+}
 
 // Обработка местоположения
 async function handleLocationMessage(phone_no_id, from, message) {
@@ -392,7 +470,12 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
             order_type: 'delivery', // Принудительно устанавливаем delivery
             delivery_choice: 'new', // Новый адрес
             location_processed: true, // Флаг что местоположение обработано
-            new_address: userState.delivery_address // Сохраняем адрес
+            new_address: userState.delivery_address, // Сохраняем адрес
+            preparation_time: userState.preparation_time,
+            specific_time: userState.specific_time,
+            promo_code: userState.promo_code,
+            comment: userState.comment,
+            payment_method: userState.payment_method
         };
         
         await setUserState(from, updatedState);
@@ -651,7 +734,12 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
             const userState = {
                 flow_type: 'new_customer',
                 customer_name: data.customer_name,
-                delivery_address: data.delivery_address
+                delivery_address: data.delivery_address,
+                preparation_time: data.preparation_time,
+            specific_time: data.specific_time,
+            promo_code: data.promo_code,
+            comment: data.comment,
+            payment_method: data.payment_method
             };
             
             await setUserState(from, userState);
@@ -724,7 +812,12 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             delivery_choice: data.delivery_choice,
             new_address: data.new_address,
             branch: data.branch,
-            customer_name: data.customer_name
+            customer_name: data.customer_name,
+            preparation_time: data.preparation_time,
+            specific_time: data.specific_time,
+            promo_code: data.promo_code,
+            comment: data.comment,
+            payment_method: data.payment_method
         };
         
         await setUserState(from, userState);
@@ -742,7 +835,12 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
                 order_type: data.order_type,
                 delivery_choice: data.delivery_choice,
                 new_address: data.new_address,
-                branch: data.branch
+                branch: data.branch,
+                preparation_time: data.preparation_time,
+            specific_time: data.specific_time,
+            promo_code: data.promo_code,
+            comment: data.comment,
+            payment_method: data.payment_method
             };
             
             await setUserState(from, updatedUserState);
@@ -1034,14 +1132,57 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             costMessage += `🏪 Самовывоз: 0 KGS\n`;
             costMessage += `📍 Филиал: ${locationTitle}\n\n`;
         }
+
+        // Добавляем информацию об оплате
+    if (userState.payment_method === 'transfer') {
+        costMessage += `💳 Способ оплаты: Перевод\n`;
+    } else {
+        costMessage += `💵 Способ оплаты: Наличными при получении\n\n`;
+    }
+
+    if (userState.preparation_time === 'specific' && userState.specific_time) {
+        costMessage += `⏰ Время приготовления: ${userState.specific_time}\n`;
+    } else {
+        costMessage += `⏰ Время приготовления: как можно скорее\n`;
+    }
+    
+    // Добавляем промокод если есть
+    if (userState.promo_code) {
+        costMessage += `🎫 Промокод: ${userState.promo_code}\n`;
+    }
+    
+    // Добавляем комментарий если есть
+    if (userState.comment) {
+        costMessage += `📝 Комментарий: ${userState.comment}\n`;
+    }
         
         costMessage += `💰 Общая стоимость: ${finalAmount} KGS\n\n`;
+        if (userState.payment_method === 'transfer') {
+        costMessage += `💳 Способ оплаты: Перевод, оправка QR кода...\n`;
+    } else {
         costMessage += `⏳ Оформляем ваш заказ...`;
+    }
         
         await sendMessage(phone_no_id, from, costMessage);
-        
+
+        if (userState.payment_method === 'transfer') {
+            await setUserWaitingState(from, WAITING_STATES.PAYMENT_CONFIRMATION);
+            const userOrders = {
+            orderItems : orderItems, 
+            customerData : customerData, 
+            locationId : locationId, 
+            locationTitle : locationTitle, 
+            orderType : orderType, 
+            finalAmount : finalAmount
+            };
+            await setUserOrder(from, userOrders);
+            sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
+    } else {
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
+    }
+        
+        
         
         // Очищаем состояние ТОЛЬКО после успешного оформления заказа
         await deleteUserState(from);
@@ -1052,6 +1193,39 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         await sendMessage(phone_no_id, from, "❌ Произошла критическая ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
         await deleteUserState(from);
         await clearUserWaitingState(from);
+    }
+
+}
+
+async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
+    try {
+        console.log("💳 Отправляем QR код для оплаты");
+        
+        const qrImageUrl = "https://yaposhkinrolls.com/image-proxy-new/460x460,q85,spFLp372BcVbVX3LkpozjsUzn_ZkOP_vM1B6xzIL8Ey4/https://storage.yandexcloud.net/quickrestobase/ve738/offer/681b464f-8e8d-4b5e-b96a-c2628eaf7a52.png";
+        const paymentPhone = "+996709063676";
+        const paymentRecipient = "ЭМИРЛАН Э.";
+        
+        const imageMessage = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "image",
+            image: {
+                link: qrImageUrl,
+                caption: `💳 QR код для оплаты\n\n💰 Сумма к оплате: ${amount} KGS\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n`
+            }
+        };
+        
+        await sendWhatsAppMessage(phone_no_id, imageMessage);
+        
+    } catch (error) {
+        console.error("❌ Ошибка отправки QR кода:", error);
+        
+        // Fallback - отправляем текстовое сообщение с реквизитами
+        const paymentPhone = "+996709063676";
+        const paymentRecipient =  "ЭМИРЛАН Э.";
+        
+        const fallbackMessage = `💳 Оплата переводом:\n\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n\n💰 Сумма к оплате: ${amount} KGS\n`;
+        await sendMessage(phone_no_id, to, fallbackMessage);
     }
 }
 
