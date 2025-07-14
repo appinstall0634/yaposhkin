@@ -1389,7 +1389,18 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
                 // Товар недоступен
                 errorMessage = `❌ К сожалению, некоторые товары из вашего заказа сейчас недоступны.\n\n`;
                 errorMessage += `Попробуйте выбрать другие блюда из каталога или свяжитесь с нашим менеджером для уточнения наличия.`;
-            } else {
+            } else if (errorDescription.includes("SoldOutProductException")) {
+    const productIds = error.response.data.error.productIds;
+    
+    const unavailableItems = productIds
+        .map(productId => orderItems.find(order => productId === order.id))
+        .filter(item => item) // убираем undefined
+        .map(item => item.title)
+        .join('\n');
+    
+    errorMessage = `❌ К сожалению, эти товары из вашего заказа сейчас недоступны.\n\n${unavailableItems}\n\nПопробуйте выбрать другие блюда из каталога или свяжитесь с нашим менеджером для уточнения наличия.`;
+}
+            else {
                 // Другие ошибки API
                 errorMessage = `❌ Ошибка оформления заказа: ${errorDescription}\n\n`;
                 errorMessage += `Наш менеджер свяжется с вами для решения проблемы.`;
