@@ -377,9 +377,7 @@ async function handlePaymentConfirmation(phone_no_id, from, message) {
             userOrders.finalAmount
         );
         
-        // Очищаем состояние
-        await deleteUserState(from);
-        await clearUserWaitingState(from);
+        
         
     } catch (error) {
         console.error("❌ Ошибка обработки подтверждения оплаты:", error);
@@ -1207,8 +1205,6 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
     } else {
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
-        await deleteUserState(from);
-        await clearUserWaitingState(from);
     }  
         
     } catch (error) {
@@ -1354,6 +1350,10 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
         // Отправляем сообщение об успехе
         await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle);
 
+        // Очищаем состояние
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
+
     } catch (error) {
         console.error('❌ Ошибка отправки заказа в API:', error);
         
@@ -1438,7 +1438,16 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             errorMessage += `Наш менеджер свяжется с вами для уточнения деталей.`;
         }
         
+
         await sendMessage(phone_no_id, from, errorMessage);
+        if(errorMessage.includes("эти товары")){
+            await sendCatalog(phone_no_id, from);
+            await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+        }else{
+            // Очищаем состояние
+            await deleteUserState(from);
+            await clearUserWaitingState(from);
+        }
     }
 }
 
