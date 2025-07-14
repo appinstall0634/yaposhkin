@@ -1182,17 +1182,13 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         await deleteUserState(from);
         await clearUserWaitingState(from);
-    }
-        
-        
-        
-        // Очищаем состояние ТОЛЬКО после успешного оформления заказа
-       
+    }  
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
         await sendMessage(phone_no_id, from, "❌ Произошла критическая ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
         await deleteUserState(from);
+        await deleteUserOrders(from);
         await clearUserWaitingState(from);
     }
 
