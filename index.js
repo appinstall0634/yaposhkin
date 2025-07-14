@@ -1204,7 +1204,6 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             };
             await setUserOrder(from, userOrders);
             sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
-            await sendOrderConfirmationButtons(phone_no_id, from, "После оплаты подтвердите заказ:");
     } else {
         // Оформляем заказ
         await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
@@ -1235,7 +1234,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                     text: "📋 Подтверждение заказа"
                 },
                 body: {
-                    text: orderSummary + "\n\nПодтвердите оформление заказа:"
+                    text: orderSummary
                 },
                 footer: {
                     text: "Yaposhkin Rolls"
@@ -1291,6 +1290,8 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
         };
         
         await sendWhatsAppMessage(phone_no_id, imageMessage);
+
+        await sendOrderConfirmationButtons(phone_no_id, to, "После оплаты подтвердите заказ:");
         
     } catch (error) {
         console.error("❌ Ошибка отправки QR кода:", error);
