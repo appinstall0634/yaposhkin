@@ -1413,7 +1413,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
 }
 
 async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
-    const lan = await getUserLan(from);
+    const lan = await getUserLan(to);
     try {
         console.log("💳 Отправляем QR код для оплаты");
         
@@ -2005,7 +2005,7 @@ async function sendCatalog(phone_no_id, to) {
 }
 
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
-    const lan = await getUserLan(from);
+    const lan = await getUserLan(to);
     try {
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
