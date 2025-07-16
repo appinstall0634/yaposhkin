@@ -1413,6 +1413,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
 }
 
 async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
+    const lan = await getUserLan(from);
     try {
         console.log("💳 Отправляем QR код для оплаты");
         
@@ -1426,7 +1427,7 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
             type: "image",
             image: {
                 link: qrImageUrl,
-                caption: `💳 QR код для оплаты\n\n💰 Сумма к оплате: ${amount} KGS\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n`
+                caption: lan==='kg' ? `💳 Төлөө үчүн QR коду\n\n💰 Төлөө турган сумма: ${amount} KGS\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n` : `💳 QR код для оплаты\n\n💰 Сумма к оплате: ${amount} KGS\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n`
             }
         };
         
@@ -1439,7 +1440,7 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
         const paymentPhone = "+996709063676";
         const paymentRecipient =  "ЭМИРЛАН Э.";
         
-        const fallbackMessage = `💳 Оплата переводом:\n\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n\n💰 Сумма к оплате: ${amount} KGS\n`;
+        const fallbackMessage = lan==='kg' ? `💳 Которуу аркылуу төлөө:\n\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n\n💰 Төлөнө турган сумма: ${amount} KGS\n` : `💳 Оплата переводом:\n\n📱 ${paymentPhone}\n👤 ${paymentRecipient}\n\n💰 Сумма к оплате: ${amount} KGS\n`;
         await sendMessage(phone_no_id, to, fallbackMessage);
     }
 }
