@@ -1327,7 +1327,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                     text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания."
                 },
                 body: {
-                    text: orderSummary
+                    text: ''
                 },
                 footer: {
                     text: "Yaposhkin Rolls"
@@ -1354,7 +1354,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
         };
         
         await setUserWaitingState(from, WAITING_STATES.LANG);
-        
+
         await sendWhatsAppMessage(phone_no_id, buttonsMessage);
         
     } catch (error) {
