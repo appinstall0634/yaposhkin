@@ -464,6 +464,7 @@ async function handleLocationMessage(phone_no_id, from, message) {
 
 // Обновление клиента с местоположением
 async function updateCustomerWithLocation(phone_no_id, from, userState, longitude, latitude) {
+    const lan = await getUserLan(from);
     try {
         console.log("=== ОБНОВЛЕНИЕ КЛИЕНТА С МЕСТОПОЛОЖЕНИЕМ ===");
         
@@ -525,10 +526,17 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
         
         // Отправляем подтверждение
         if (userState.flow_type === 'new_customer') {
-            const confirmText = `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
+            var confirmText = `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
+            if(lan === 'kg'){
+                confirmText = `Катталганыңыз үчүн рахмат, ${userState.customer_name}! 🎉\n\nДарегиңиз сакталды: ${userState.delivery_address}\n\nЭми буйрутмаларды бере аласыз. Мен сизге азыр биздин каталогду жөнөтөм! 🍣`;
+            }
+            
             await sendMessage(phone_no_id, from, confirmText);
         } else {
-            const confirmText = `✅ Новый адрес добавлен!\n\n📍 ${userState.delivery_address}\n\nТеперь выберите блюда из каталога:`;
+            var confirmText = `✅ Новый адрес добавлен!\n\n📍 ${userState.delivery_address}\n\nТеперь выберите блюда из каталога:`;
+            if(lan === 'kg'){
+                confirmText = `✅ Жаңы дарек кошулду!\n\n📍 ${userState.delivery_address}\n\nЭми каталогдон тамактарды тандаңыз:`;
+            }
             await sendMessage(phone_no_id, from, confirmText);
         }
         
@@ -1964,7 +1972,7 @@ async function sendCatalog(phone_no_id, to) {
             const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
             console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
-            await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId);
+            await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId, lan);
         }
         
         // Отправляем финальное сообщение
@@ -2004,8 +2012,7 @@ async function sendCatalog(phone_no_id, to) {
     }
 }
 
-async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
-    const lan = await getUserLan(to);
+async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId, lan) {
     try {
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
