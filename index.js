@@ -1353,7 +1353,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
             }
         };
         
-        await setUserWaitingState(from, WAITING_STATES.LANG);
+        await setUserWaitingState(to, WAITING_STATES.LANG);
 
         await sendWhatsAppMessage(phone_no_id, buttonsMessage);
         
