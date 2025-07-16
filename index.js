@@ -181,7 +181,7 @@ async function setUserWaitingState(phone, waitingState, lan) {
     try {
         const now = new Date();
         console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${waitingState}`);
-        if(waitingState === WAITING_STATES.LANG){
+        // if(waitingState === WAITING_STATES.LANG){
             await userStatesCollection.updateOne(
             { phone },
             {
@@ -197,22 +197,22 @@ async function setUserWaitingState(phone, waitingState, lan) {
             },
             { upsert: true }
         );
-        }else{
-            await userStatesCollection.updateOne(
-            { phone },
-            {
-                $set: {
-                    phone,
-                    waitingState,
-                    updatedAt: now
-                },
-                $setOnInsert: {
-                    createdAt: now
-                }
-            },
-            { upsert: true }
-        );   
-        }
+        // }else{
+        //     await userStatesCollection.updateOne(
+        //     { phone },
+        //     {
+        //         $set: {
+        //             phone,
+        //             waitingState,
+        //             updatedAt: now
+        //         },
+        //         $setOnInsert: {
+        //             createdAt: now
+        //         }
+        //     },
+        //     { upsert: true }
+        // );   
+        // }
     } catch (error) {
         console.error(`❌ Ошибка установки состояния ожидания пользователя ${phone}:`, error);
     }
@@ -604,7 +604,7 @@ async function checkCustomerAndSendFlow(phone_no_id, from, lan) {
         }
 
         // Устанавливаем состояние ожидания ответа от Flow
-        await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE);
+        await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE, lan);
 
     } catch (error) {
         console.error('❌ Ошибка проверки клиента:', error);
