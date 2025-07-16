@@ -917,7 +917,7 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
 async function registerCustomerWithoutLocation(phone_no_id, from, data) {
     try {
         console.log("=== РЕГИСТРАЦИЯ КЛИЕНТА БЕЗ МЕСТОПОЛОЖЕНИЯ ===");
-        
+        const lan = await getUserLan(from);
         // Получаем qr_token
         const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
         const qr_token = customerResponse.data.qr_access_token;
@@ -937,6 +937,9 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
         
         // Отправляем подтверждение
         const confirmText = `Спасибо за регистрацию, ${data.customer_name}! 🎉\n\nВы выбрали самовывоз.\n\nТеперь выберите блюда из нашего каталога! 🍣`;
+        if(lan === 'kg'){
+            confirmText = `Катталганыңыз үчүн рахмат, ${data.customer_name}! 🎉\n\nСиз алып кетүүнү тандадыңыз.\n\nЭми биздин каталогдон тамактарды тандаңыз! 🍣`;
+        }
         await sendMessage(phone_no_id, from, confirmText);
         
         // Устанавливаем состояние ожидания заказа из каталога
@@ -990,10 +993,10 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
                 new_address: data.new_address,
                 branch: data.branch,
                 preparation_time: data.preparation_time,
-            specific_time: data.specific_time,
-            promo_code: data.promo_code,
-            comment: data.comment,
-            payment_method: data.payment_method
+                specific_time: data.specific_time,
+                promo_code: data.promo_code,
+                comment: data.comment,
+                payment_method: data.payment_method
             };
             
             await setUserState(from, updatedUserState);
@@ -1011,7 +1014,7 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             let confirmText;
             if (data.order_type === 'delivery') {
                 if(lan==='kg'){
-                    confirmText = `✅ Эң сонун! Заказ тандалган дарекке жеткирилет.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
+                    confirmText = `✅ Эң сонун! Заказ тандалган дарекке жеткирилет.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nКаталогдон тамактарды тандаңыз:`;
                 }else{
                     confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
                 }
@@ -1042,14 +1045,19 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
 // Отправка запроса местоположения
 async function sendLocationRequest(phone_no_id, from, customerName) {
     console.log("=== ЗАПРОС МЕСТОПОЛОЖЕНИЯ ===");
-    
+
+    const lan = await getUserLan(from);
     const locationText = `Спасибо, ${customerName}! 📍\n\nДля точной доставки, пожалуйста, поделитесь своим местоположением.`;
+    if(lan==='kg'){
+        locationText = `Рахмат, ${customerName}! 📍\n\nТак жеткирүү үчүн жайгашкан жериңизди бөлүшүңүз.`;
+    }
     
     await sendMessage(phone_no_id, from, locationText);
 }
 
 // Обработка ответа от каталога в формате order
 async function handleCatalogOrderResponse(phone_no_id, from, message) {
+    const lan = await getUserLan(from);
     try {
         console.log("=== ОТВЕТ ОТ КАТАЛОГА (ORDER FORMAT) ===");
         console.log("Order message:", JSON.stringify(message, null, 2));
@@ -1057,7 +1065,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         const order = message.order;
         
         // Формируем информацию о заказе
-        let orderSummary = "🛒 Ваш заказ:\n\n";
+        let orderSummary = lan === 'kg' ? "🛒 Сиздин заказыныз:\n\n" :"🛒 Ваш заказ:\n\n";
         let totalAmount = 0;
         let orderItems = [];
         
@@ -1080,8 +1088,8 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
                 console.log(`Название товара: ${productName}`);
                 
                 orderSummary += `${index + 1}. ${productName}\n`;
-                orderSummary += `Количество: ${item.quantity} ${productInfo.measure_unit || 'шт'}\n`;
-                orderSummary += `Цена: ${itemPrice} KGS x ${item.quantity} = ${itemTotal} KGS\n\n`;
+                orderSummary += lan === 'kg' ? `Даанасы: ${item.quantity} ${productInfo.measure_unit || 'шт'}\n` : `Количество: ${item.quantity} ${productInfo.measure_unit || 'шт'}\n`;
+                orderSummary += lan === 'kg' ? `Баасы: ${itemPrice} KGS x ${item.quantity} = ${itemTotal} KGS\n\n` : `Цена: ${itemPrice} KGS x ${item.quantity} = ${itemTotal} KGS\n\n`;
                 
                 totalAmount += itemTotal;
                 
@@ -1098,7 +1106,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         }
         
         console.log("📦 Товары для заказа:", orderItems);
-        orderSummary += `💰 Общая стоимость: ${totalAmount} KGS\n\n`;
+        orderSummary += lan === 'kg' ? `💰 Жалпы наркы: ${totalAmount} KGS\n\n` : `💰 Общая стоимость: ${totalAmount} KGS\n\n`;
         
         // Получаем состояние пользователя для определения типа заказа из MongoDB
         const userState = await getUserState(from);
@@ -1115,6 +1123,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
 
 // Расчет доставки и оформление заказа
 async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, userState) {
+    const lan = await getUserLan(from);
     try {
         console.log("=== РАСЧЕТ ДОСТАВКИ И ОФОРМЛЕНИЕ ЗАКАЗА ===");
         console.log("User state from parameter:", userState);
@@ -1287,24 +1296,24 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         let costMessage = orderSummary;
         
         if (orderType === "delivery") {
-            costMessage += `🚚 Стоимость доставки: ${deliveryCost} KGS\n`;
-            costMessage += `📍 Адрес доставки: ${deliveryAddress}\n\n`;
+            costMessage += lan === 'kg' ? `🚚 Жеткирүү баасы: ${deliveryCost} KGS\n`: `🚚 Стоимость доставки: ${deliveryCost} KGS\n`;
+            costMessage += lan === 'kg' ? `📍 Жеткирүү дареги: ${deliveryAddress}\n\n`: `📍 Адрес доставки: ${deliveryAddress}\n\n`;
         } else {
-            costMessage += `🏪 Самовывоз: 0 KGS\n`;
+            costMessage += lan === 'kg' ? `🏪 Алып кетүү: 0 сом\n` : `🏪 Самовывоз: 0 KGS\n`;
             costMessage += `📍 Филиал: ${locationTitle}\n\n`;
         }
 
         // Добавляем информацию об оплате
     if (userState.payment_method === 'transfer') {
-        costMessage += `💳 Способ оплаты: Перевод\n`;
+        costMessage += lan === 'kg' ? `💳 Төлөө ыкмасы: Которуу\n` : `💳 Способ оплаты: Перевод\n`;
     } else {
-        costMessage += `💵 Способ оплаты: Наличными при получении\n\n`;
+        costMessage += lan === 'kg' ? `💵 Төлөө ыкмасы: Жеткирүү боюнча накталай акча\n\n` : `💵 Способ оплаты: Наличными при получении\n\n`;
     }
 
     if (userState.preparation_time === 'specific' && userState.specific_time) {
-        costMessage += `⏰ Время приготовления: ${userState.specific_time}\n`;
+        costMessage += lan === 'kg' ? `⏰ Бышыруу убактысы: ${userState.specific_time}\n` : `⏰ Время приготовления: ${userState.specific_time}\n`;
     } else {
-        costMessage += `⏰ Время приготовления: как можно скорее\n`;
+        costMessage += lan === 'kg' ? `⏰ Даярдоо убактысы: мүмкүн болушунча тезирээк\n` : `⏰ Время приготовления: как можно скорее\n`;
     }
     
     // Добавляем промокод если есть
@@ -1317,11 +1326,11 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         costMessage += `📝 Комментарий: ${userState.comment}\n`;
     }
         
-        costMessage += `💰 Общая стоимость: ${finalAmount} KGS\n\n`;
+        costMessage += lan === 'kg' ? `💰 Жалпы наркы: ${finalAmount} сом\n\n` : `💰 Общая стоимость: ${finalAmount} KGS\n\n`;
         if (userState.payment_method === 'transfer') {
-        costMessage += `💳 Способ оплаты: Перевод, оправка QR кода...\n`;
+        costMessage += lan === 'kg' ? `💳 Төлөө ыкмасы: Которуу, QR кодун жөнөтүү...\n` : `💳 Способ оплаты: Перевод, оправка QR кода...\n`;
     } else {
-        costMessage += `⏳ Оформляем ваш заказ...`;
+        costMessage += lan === 'kg' ? `⏳ Буйрутмаңыз иштетилүүдө...` : `⏳ Оформляем ваш заказ...`;
     }
         
         await sendMessage(phone_no_id, from, costMessage);
@@ -1337,7 +1346,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             finalAmount : finalAmount
             };
             await setUserOrder(from, userOrders);
-            sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
+            await sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
     } 
     await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         
@@ -1643,26 +1652,27 @@ async function getLocationWorkingHours(locationId) {
 
 // Отправка сообщения об успешном заказе
 async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orderType, finalAmount, locationTitle) {
+    const lan = await getUserLan(from);
     try {
         let successMessage = '';
         
         if (preorderResponse.status === 'success') {
-            successMessage = '🎉 Ваш заказ принят!\n\n';
-            successMessage += `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n\n`;
+            successMessage = lan==='kg' ? '🎉 Буйрутмаңыз кабыл алынды!\n\n' : '🎉 Ваш заказ принят!\n\n';
+            successMessage += lan==='kg' ? `📋 Буйрутма номери: ${preorderResponse.data.preorder_id}\n\n` : `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n\n`;
             
             if (orderType === 'pickup') {
-                successMessage += `🏪 Самовывоз из филиала:\n`;
+                successMessage += lan==='kg' ? `🏪 Алуучу филиал:\n` : `🏪 Самовывоз из филиала:\n`;
                 successMessage += `📍 ${locationTitle}\n`;
             } else {
-                successMessage += `🚗 Доставка по вашему адресу\n`;
+                successMessage += lan==='kg' ? `🚗 Дарегиңиз боюнча жеткирүү\n` : `🚗 Доставка по вашему адресу\n`;
             }
 
-            successMessage += `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
-            successMessage += '⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.\n\n';
-            successMessage += '📞 Если у вас есть вопросы, вы можете связаться с нами по телефону или написать в этот чат.';
+            successMessage += lan==='kg' ? `💰 Төлөө турган сумма: ${finalAmount} сом\n\n` : `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
+            successMessage += lan==='kg' ? '⏳ Чоо-жайын ырастоо үчүн менеджерибиздин чалуусун күтүңүз.\n\n' : '⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.\n\n';
+            successMessage += lan==='kg' ? '📞 Суроолоруңуз болсо, биз менен телефон аркылуу байланышсаңыз же бул чатта жазсаңыз болот.' : '📞 Если у вас есть вопросы, вы можете связаться с нами по телефону или написать в этот чат.';
         } else {
-            successMessage = '❌ Произошла ошибка при оформлении заказа.\n';
-            successMessage += 'Наш менеджер свяжется с вами для уточнения деталей.';
+            successMessage = lan==='kg' ? '❌ Буйрутмаңызды берүү учурунда ката кетти.\n' : '❌ Произошла ошибка при оформлении заказа.\n';
+            successMessage += lan==='kg' ? 'Биздин менеджер чоо-жайын тактоо үчүн сиз менен байланышат.' : 'Наш менеджер свяжется с вами для уточнения деталей.';
         }
 
         await sendMessage(phone_no_id, from, successMessage);
@@ -1922,7 +1932,7 @@ const optimizedMenuGroups = [
 
 async function sendCatalog(phone_no_id, to) {
     console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
-    
+    const lan = await getUserLan(from);
     try {
         // Получаем CATALOG_ID из переменных окружения
         const catalogId = process.env.CATALOG_ID;
@@ -1958,38 +1968,43 @@ async function sendCatalog(phone_no_id, to) {
         
         // Отправляем финальное сообщение
         const finalText = `Выберите понравившиеся блюда из любой категории и добавьте в корзину.`;
+        if(lan === 'kg'){
+            finalText = `Каалаган категориядан тамактарды тандаңыз.`;
+        }
         await sendMessage(phone_no_id, to, finalText);
         
         console.log("✅ Оптимизированный каталог отправлен полностью");
         
     } catch (error) {
+        await sendMessage(phone_no_id, to, "Ошибка отправки каталога");
         console.error("❌ Ошибка отправки каталога:", error);
         
         // Fallback - отправляем обычный каталог
         console.log("🔄 Отправляем обычный каталог как fallback");
-        const fallbackCatalogData = {
-            messaging_product: "whatsapp",
-            to: to,
-            type: "interactive",
-            interactive: {
-                type: "catalog_message",
-                body: {
-                    text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
-                },
-                footer: {
-                    text: "Доставка 30-40 минут"
-                },
-                action: {
-                    name: "catalog_message"
-                }
-            }
-        };
+        // const fallbackCatalogData = {
+        //     messaging_product: "whatsapp",
+        //     to: to,
+        //     type: "interactive",
+        //     interactive: {
+        //         type: "catalog_message",
+        //         body: {
+        //             text: "🍣 Наш полный каталог Yaposhkin Rolls!\n\nВыберите понравившиеся блюда и добавьте в корзину. Все товары свежие и готовятся с любовью! ❤️"
+        //         },
+        //         footer: {
+        //             text: "Доставка 30-40 минут"
+        //         },
+        //         action: {
+        //             name: "catalog_message"
+        //         }
+        //     }
+        // };
         
-        await sendWhatsAppMessage(phone_no_id, fallbackCatalogData);
+        // await sendWhatsAppMessage(phone_no_id, fallbackCatalogData);
     }
 }
 
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId) {
+    const lan = await getUserLan(from);
     try {
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
@@ -2026,7 +2041,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         if (headerText.length > 60) {
             headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
-        
+
         const productListData = {
             messaging_product: "whatsapp",
             to: to,
@@ -2049,6 +2064,31 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 }
             }
         };
+        if(lan === 'kg'){
+            productListData = {
+            messaging_product: "whatsapp",
+            to: to,
+            type: "interactive",
+            interactive: {
+                type: "product_list",
+                header: {
+                    type: "text",
+                    text: headerText
+                },
+                body: {
+                    text: `Тамактарды танданыз:`
+                },
+                footer: {
+                    text: "Yaposhkin Rolls"
+                },
+                action: {
+                    catalog_id: catalogId,
+                    sections: sections
+                }
+            }
+        };
+        }
+        
         
         console.log(`📤 Отправляем product_list:`);
         console.log(`   📋 Заголовок: ${headerText}`);
