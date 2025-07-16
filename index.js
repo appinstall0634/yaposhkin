@@ -89,6 +89,16 @@ async function getUserState(phone) {
     }
 }
 
+async function getUserLan(phone) {
+    try {
+        const userDoc = await userStatesCollection.findOne({ phone });
+        return userDoc?.lan || null;
+    } catch (error) {
+        console.error(`❌ Ошибка получения состояния пользователя ${phone}:`, error);
+        return null;
+    }
+}
+
 async function getUserOrders(phone) {
     try {
         const userDoc = await userDataForOrderCollection.findOne({ phone });
@@ -181,7 +191,7 @@ async function setUserWaitingState(phone, waitingState, lan) {
     try {
         const now = new Date();
         console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${waitingState}`);
-        // if(waitingState === WAITING_STATES.LANG){
+        if(waitingState === WAITING_STATES.FLOW_RESPONSE){
             await userStatesCollection.updateOne(
             { phone },
             {
@@ -197,22 +207,22 @@ async function setUserWaitingState(phone, waitingState, lan) {
             },
             { upsert: true }
         );
-        // }else{
-        //     await userStatesCollection.updateOne(
-        //     { phone },
-        //     {
-        //         $set: {
-        //             phone,
-        //             waitingState,
-        //             updatedAt: now
-        //         },
-        //         $setOnInsert: {
-        //             createdAt: now
-        //         }
-        //     },
-        //     { upsert: true }
-        // );   
-        // }
+        }else{
+            await userStatesCollection.updateOne(
+            { phone },
+            {
+                $set: {
+                    phone,
+                    waitingState,
+                    updatedAt: now
+                },
+                $setOnInsert: {
+                    createdAt: now
+                }
+            },
+            { upsert: true }
+        );   
+        }
     } catch (error) {
         console.error(`❌ Ошибка установки состояния ожидания пользователя ${phone}:`, error);
     }
@@ -834,7 +844,6 @@ async function sendExistingCustomerFlowKy(phone_no_id, from, customer, branches)
 async function handleFlowResponse(phone_no_id, from, message, body_param) {
     try {
         console.log("=== ОБРАБОТКА FLOW ОТВЕТА ===");
-        
         const flowResponse = JSON.parse(message.interactive.nfm_reply.response_json);
         const customerProfile = body_param.entry[0].changes[0].value.contacts[0].profile.name;
         
@@ -850,11 +859,11 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
         } else {
             // Неизвестный тип flow - отправляем каталог
             console.log("❓ Неизвестный тип Flow, отправляем каталог");
-            await sendMessage(phone_no_id, from, "Спасибо! Выберите блюда из каталога:");
+            await sendMessage(phone_no_id, from, "Ошибка обработки flow!");
             
-            await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+            // await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
             
-            await sendCatalog(phone_no_id, from);
+            // await sendCatalog(phone_no_id, from);
         }
 
     } catch (error) {
@@ -868,6 +877,8 @@ async function handleFlowResponse(phone_no_id, from, message, body_param) {
 async function handleNewCustomerRegistration(phone_no_id, from, data) {
     try {
         console.log('📝 Регистрируем нового клиента:', data);
+
+        // const lan = await getUserLan(from);
 
         // Если выбрана доставка и есть новый адрес - запрашиваем местоположение
         if (data.order_type === 'delivery' && data.delivery_address) {
@@ -944,6 +955,7 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
 // Обработка заказа существующего клиента
 async function handleExistingCustomerOrder(phone_no_id, from, data) {
     try {
+        const lan = await getUserLan(from);
         console.log('🛒 Обрабатываем заказ существующего клиента:', data);
         
         // Сохраняем данные заказа для дальнейшего использования в MongoDB
@@ -998,9 +1010,17 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             // Формируем сообщение в зависимости от типа заказа
             let confirmText;
             if (data.order_type === 'delivery') {
-                confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
+                if(lan==='kg'){
+                    confirmText = `✅ Эң сонун! Заказ тандалган дарекке жеткирилет.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
+                }else{
+                    confirmText = `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${data.user_addresses.find(adress => adress.id === data.delivery_choice).title}\n\nВыберите блюда из каталога:`;
+                }
             } else {
-                confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\n${data.branches.find(branch => branch.id === data.branch).title}\n\nВыберите блюда из каталога:`;
+                if(lan==='kg'){
+                confirmText = `✅ Абдан жакшы! Сиз алып кетүүнү тандадыңыз.\n\n${data.branches.find(branch => branch.id === data.branch).title}\n\nКаталогдон тамактарды тандаңыз:`;
+                }else{
+                    confirmText = `✅ Отлично! Вы выбрали самовывоз.\n\n${data.branches.find(branch => branch.id === data.branch).title}\n\nВыберите блюда из каталога:`;
+                }
             }
             
             await sendMessage(phone_no_id, from, confirmText);
