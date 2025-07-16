@@ -1933,7 +1933,7 @@ const optimizedMenuGroups = [
 
 async function sendCatalog(phone_no_id, to) {
     console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
-    const lan = await getUserLan(from);
+    const lan = await getUserLan(to);
     try {
         // Получаем CATALOG_ID из переменных окружения
         const catalogId = process.env.CATALOG_ID;
