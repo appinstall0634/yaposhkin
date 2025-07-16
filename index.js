@@ -177,12 +177,28 @@ async function getUserWaitingState(phone) {
 }
 
 // Установка состояния ожидания пользователя
-async function setUserWaitingState(phone, waitingState) {
+async function setUserWaitingState(phone, waitingState, lan) {
     try {
         const now = new Date();
         console.log(`🔄 Устанавливаем состояние ожидания для ${phone}: ${waitingState}`);
-        
-        await userStatesCollection.updateOne(
+        if(waitingState === WAITING_STATES.LANG){
+            await userStatesCollection.updateOne(
+            { phone },
+            {
+                $set: {
+                    phone,
+                    waitingState,
+                    lan,
+                    updatedAt: now
+                },
+                $setOnInsert: {
+                    createdAt: now
+                }
+            },
+            { upsert: true }
+        );
+        }else{
+            await userStatesCollection.updateOne(
             { phone },
             {
                 $set: {
@@ -195,7 +211,8 @@ async function setUserWaitingState(phone, waitingState) {
                 }
             },
             { upsert: true }
-        );
+        );   
+        }
     } catch (error) {
         console.error(`❌ Ошибка установки состояния ожидания пользователя ${phone}:`, error);
     }
@@ -794,7 +811,7 @@ async function sendExistingCustomerFlowKy(phone_no_id, from, customer, branches)
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID_KY,
-                    flow_cta: "Заказать",
+                    flow_cta: "Заказ беруу",
                     flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
