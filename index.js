@@ -1337,7 +1337,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                         {
                             type: "reply",
                             reply: {
-                                id: "confirm_order",
+                                id: "kg",
                                 title: "Кыргыз тил"
                             }
                         },
@@ -1353,9 +1353,9 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
             }
         };
         
-        await sendWhatsAppMessage(phone_no_id, buttonsMessage);
-
         await setUserWaitingState(from, WAITING_STATES.LANG);
+        
+        await sendWhatsAppMessage(phone_no_id, buttonsMessage);
         
     } catch (error) {
         console.error("❌ Ошибка отправки кнопок подтверждения:", error);
