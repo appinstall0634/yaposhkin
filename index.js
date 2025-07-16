@@ -19,6 +19,9 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 // Flow IDs
 const NEW_CUSTOMER_FLOW_ID = '4265839023734503'; // newCustomer
 const ORDER_FLOW_ID = '708820881926236'; // order
+const NEW_CUSTOMER_FLOW_ID_KY = '1648351135826188'; // newCustomer
+const ORDER_FLOW_ID_KY = '1039325028388021'; // order
+
 
 // MongoDB конфигурация
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
@@ -30,6 +33,7 @@ let userDataForOrderCollection = null;
 // Возможные состояния ожидания
 const WAITING_STATES = {
     NONE: 'none',                    // Принимаем любые сообщения
+    LANG: 'lang',
     FLOW_RESPONSE: 'flow_response',  // Ожидаем ответ от Flow
     LOCATION: 'location',            // Ожидаем местоположение
     CATALOG_ORDER: 'catalog_order',   // Ожидаем ответ от каталога
@@ -324,18 +328,18 @@ app.post("/webhook", async (req, res) => {
                     // Ответ от каталога в формате order когда мы его ждали
                     console.log("🛒 Обрабатываем ожидаемый ответ от каталога (order)");
                     await handleCatalogOrderResponse(phone_no_id, from, message);
-                }  else if (message.type === "interactive" && 
-                   message.interactive.type === "button_reply" && 
-                   currentWaitingState === WAITING_STATES.PAYMENT_CONFIRMATION) {
-            // Кнопки подтверждения заказа
-            console.log("🔘 Обрабатываем кнопку подтверждения заказа");
-            await handleOrderConfirmationButton(phone_no_id, from, message);
-            
-        }
+                } 
                 else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
-                    await handleIncomingMessage(phone_no_id, from, message);
+                    await sendOrderConfirmationButtons(phone_no_id, from, "После оплаты подтвердите заказ:");
+                }else if (message.type === "interactive" && 
+                   message.interactive.type === "button_reply" && 
+                   currentWaitingState === WAITING_STATES.LANG){
+                    // Любое другое сообщение
+                    console.log("📝 Обрабатываем сообщение от кнопки");
+                    await handleOrderConfirmationButton(phone_no_id, from, message);
+                    // await handleIncomingMessage(phone_no_id, from, message);
                 }else{
 
                 }
@@ -390,23 +394,10 @@ async function handleOrderConfirmationButton(phone_no_id, from, message) {
     try {
         const buttonId = message.interactive.button_reply.id;
         console.log("🔘 Нажата кнопка:", buttonId);
-        
-        if (buttonId === "confirm_order") {
-            // Подтверждение заказа
-            await handlePaymentConfirmation(phone_no_id, from, message);
-        } else if (buttonId === "cancel_order") {
-            // Отмена заказа
-            console.log("❌ Заказ отменен пользователем");
-            await sendMessage(phone_no_id, from, "❌ Заказ отменен. Если захотите заказать что-то еще, напишите нам!");
-            await deleteUserState(from);
-            await clearUserWaitingState(from);
-        } else {
-            console.log("❓ Неизвестная кнопка:", buttonId);
-            await sendMessage(phone_no_id, from, "Выберите одну из предложенных опций.");
-        }
+        await handleIncomingMessage(phone_no_id, from, message, buttonId);
         
     } catch (error) {
-        console.error("❌ Ошибка обработки кнопки подтверждения:", error);
+        console.error("❌ Ошибка обработки кнопки выбора языка:", error);
         await sendMessage(phone_no_id, from, "Произошла ошибка. Попробуйте еще раз.");
     }
 }
@@ -539,7 +530,7 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
 }
 
 // Обработка входящих сообщений - проверка клиента
-async function handleIncomingMessage(phone_no_id, from, message) {
+async function handleIncomingMessage(phone_no_id, from, message, lan) {
     console.log("=== ПРОВЕРКА КЛИЕНТА ===");
     
     const messageText = message.text?.body?.toLowerCase();
@@ -547,11 +538,11 @@ async function handleIncomingMessage(phone_no_id, from, message) {
     // Проверяем если это команда для заказа или любое текстовое сообщение
     console.log(`Получено сообщение от ${from}: ${messageText || 'не текст'}`);
     
-    await checkCustomerAndSendFlow(phone_no_id, from);
+    await checkCustomerAndSendFlow(phone_no_id, from, lan);
 }
 
 // Проверка клиента и отправка соответствующего Flow
-async function checkCustomerAndSendFlow(phone_no_id, from) {
+async function checkCustomerAndSendFlow(phone_no_id, from, lan) {
     try {
         console.log(`🔍 Проверяем клиента: ${from}`);
         
@@ -581,10 +572,18 @@ async function checkCustomerAndSendFlow(phone_no_id, from) {
 
         if (isNewCustomer) {
             console.log('🆕 Новый клиент - отправляем регистрационный Flow');
-            await sendNewCustomerFlow(phone_no_id, from, branches);
+            if(lan == 'kg'){
+                await sendNewCustomerFlowKy(phone_no_id, from, branches);    
+            }else{
+                await sendNewCustomerFlow(phone_no_id, from, branches);
+            }
         } else {
             console.log('✅ Существующий клиент - отправляем Flow с адресами');
-            await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
+            if(lan == 'kg'){
+            await sendExistingCustomerFlowKy(phone_no_id, from, customerData.customer, branches);    
+            }else{
+                await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
+            }
         }
 
         // Устанавливаем состояние ожидания ответа от Flow
@@ -655,6 +654,48 @@ async function sendNewCustomerFlow(phone_no_id, from, branches) {
     await sendWhatsAppMessage(phone_no_id, flowData);
 }
 
+async function sendNewCustomerFlowKy(phone_no_id, from, branches) {
+    console.log("=== ОТПРАВКА FLOW ДЛЯ НОВЫХ КЛИЕНТОВ ===");
+    
+    const flowData = {
+        messaging_product: "whatsapp",
+        to: from,
+        type: "interactive",
+        interactive: {
+            type: "flow",
+            header: {
+                type: "text",
+                text: "🍣 Yaposhkin Rolls"
+            },
+            body: {
+                text: "Кош келиңиз!"
+            },
+            footer: {
+                text: "Каттоо формасын толтурунуз"
+            },
+            action: {
+                name: "flow",
+                parameters: {
+                    flow_message_version: "3",
+                    flow_token: `new_customer_${Date.now()}`,
+                    flow_id: NEW_CUSTOMER_FLOW_ID,
+                    flow_cta: "Каттоо",
+                    flow_action: "navigate",
+                    flow_action_payload: {
+                        screen: "WELCOME_NEW",
+                        data: {
+                            flow_type: "new_customer",
+                            branches: branches
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    await sendWhatsAppMessage(phone_no_id, flowData);
+}
+
 // Отправка Flow для существующих клиентов
 async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
     console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
@@ -695,6 +736,64 @@ async function sendExistingCustomerFlow(phone_no_id, from, customer, branches) {
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID,
+                    flow_cta: "Заказать",
+                    flow_action: "navigate",
+                    flow_action_payload: {
+                        screen: "ORDER_TYPE",
+                        data: {
+                            flow_type: "existing_customer",
+                            customer_name: customer.first_name,
+                            user_addresses: addresses,
+                            branches: branches
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    await sendWhatsAppMessage(phone_no_id, flowData);
+}
+
+async function sendExistingCustomerFlowKy(phone_no_id, from, customer, branches) {
+    console.log("=== ОТПРАВКА FLOW ДЛЯ СУЩЕСТВУЮЩИХ КЛИЕНТОВ ===");
+    
+    // Формируем массив адресов в формате объектов для dropdown
+    const addresses = customer.addresses.map((addr) => ({
+        id: `address_${addr.id}`,
+        title: addr.full_address
+    }));
+    
+    // Добавляем опцию "Новый адрес"
+    addresses.push({
+        id: "new",
+        title: "➕ Жаны дарек"
+    });
+    
+    console.log("📍 Адреса клиента:", addresses);
+    
+    const flowData = {
+        messaging_product: "whatsapp",
+        to: from,
+        type: "interactive",
+        interactive: {
+            type: "flow",
+            header: {
+                type: "text",
+                text: "🛒 Заказ беруу"
+            },
+            body: {
+                text: `Салам, ${customer.first_name}!`
+            },
+            footer: {
+                text: "Форма толтурунуз"
+            },
+            action: {
+                name: "flow",
+                parameters: {
+                    flow_message_version: "3",
+                    flow_token: `existing_customer_${Date.now()}`,
+                    flow_id: ORDER_FLOW_ID_KY,
                     flow_cta: "Заказать",
                     flow_action: "navigate",
                     flow_action_payload: {
@@ -1191,7 +1290,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         await sendMessage(phone_no_id, from, costMessage);
 
         if (userState.payment_method === 'transfer') {
-            await setUserWaitingState(from, WAITING_STATES.PAYMENT_CONFIRMATION);
+            // await setUserWaitingState(from, WAITING_STATES.PAYMENT_CONFIRMATION);
             const userOrders = {
             orderItems : orderItems, 
             customerData : customerData, 
@@ -1202,10 +1301,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             };
             await setUserOrder(from, userOrders);
             sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
-    } else {
-        // Оформляем заказ
-        await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
-    }  
+    } 
+    await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
@@ -1227,7 +1324,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                 type: "button",
                 header: {
                     type: "text",
-                    text: "📋 Подтверждение заказа"
+                    text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания."
                 },
                 body: {
                     text: orderSummary
@@ -1241,14 +1338,14 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                             type: "reply",
                             reply: {
                                 id: "confirm_order",
-                                title: "✅ Подтвердить"
+                                title: "Кыргыз тил"
                             }
                         },
                         {
                             type: "reply",
                             reply: {
-                                id: "cancel_order",
-                                title: "❌ Отменить"
+                                id: "ru",
+                                title: "Русский"
                             }
                         }
                     ]
@@ -1257,6 +1354,8 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
         };
         
         await sendWhatsAppMessage(phone_no_id, buttonsMessage);
+
+        await setUserWaitingState(from, WAITING_STATES.LANG);
         
     } catch (error) {
         console.error("❌ Ошибка отправки кнопок подтверждения:", error);
@@ -1286,8 +1385,6 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
         };
         
         await sendWhatsAppMessage(phone_no_id, imageMessage);
-
-        await sendOrderConfirmationButtons(phone_no_id, to, "После оплаты подтвердите заказ:");
         
     } catch (error) {
         console.error("❌ Ошибка отправки QR кода:", error);
