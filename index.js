@@ -2043,7 +2043,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
             headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
 
-        const productListData = {
+        var productListData = {
             messaging_product: "whatsapp",
             to: to,
             type: "interactive",
