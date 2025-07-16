@@ -332,7 +332,7 @@ app.post("/webhook", async (req, res) => {
                 else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
-                    await sendOrderConfirmationButtons(phone_no_id, from, "");
+                    await sendOrderConfirmationButtons(phone_no_id, from);
                 }else if (message.type === "interactive" && 
                    message.interactive.type === "button_reply" && 
                    currentWaitingState === WAITING_STATES.LANG){
@@ -1314,7 +1314,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
 
 }
 
-async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
+async function sendOrderConfirmationButtons(phone_no_id, to) {
     try {
         const buttonsMessage = {
             messaging_product: "whatsapp",
@@ -1324,10 +1324,10 @@ async function sendOrderConfirmationButtons(phone_no_id, to, orderSummary) {
                 type: "button",
                 header: {
                     type: "text",
-                    text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания."
+                    text: "Кош келиниз!"
                 },
                 body: {
-                    text: ''
+                    text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания."
                 },
                 footer: {
                     text: "Yaposhkin Rolls"
