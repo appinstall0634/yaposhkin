@@ -1361,7 +1361,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
         console.error("❌ Ошибка отправки кнопок подтверждения:", error);
         
         // Fallback - отправляем обычное сообщение
-        const fallbackMessage = orderSummary + "\n\nОтправьте любое сообщение для подтверждения заказа или напишите 'отмена' для отмены.";
+        const fallbackMessage = "\n\nОтправьте любое сообщение для подтверждения заказа или напишите 'отмена' для отмены.";
         await sendMessage(phone_no_id, to, fallbackMessage);
     }
 }
