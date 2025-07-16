@@ -332,7 +332,7 @@ app.post("/webhook", async (req, res) => {
                 else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
                     // Любое другое сообщение
                     console.log("📝 Обрабатываем обычное сообщение");
-                    await sendOrderConfirmationButtons(phone_no_id, from, "После оплаты подтвердите заказ:");
+                    await sendOrderConfirmationButtons(phone_no_id, from, "");
                 }else if (message.type === "interactive" && 
                    message.interactive.type === "button_reply" && 
                    currentWaitingState === WAITING_STATES.LANG){
