@@ -277,6 +277,8 @@ async function startServer() {
     try {
         // Инициализируем MongoDB
         await initMongoDB();
+
+        await getAllProductsForSections();
         
         app.listen(PORT, () => {
             console.log("webhook is listening");
