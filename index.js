@@ -1727,6 +1727,9 @@ async function handleCatalogResponse(phone_no_id, from, message) {
 let productsCache = null;
 let cacheExpiry = null;
 
+let productsCacheForSection = null;
+let cacheExpiryFotSection = null;
+
 // Получение всех товаров и кэширование
 async function getAllProducts() {
     try {
@@ -1764,6 +1767,39 @@ async function getAllProducts() {
     }
 }
 
+async function getAllProductsForSections() {
+    try {
+        // Проверяем кэш (обновляем каждые 30 минут)
+        if (productsCacheForSection && cacheExpiryFotSection && Date.now() < cacheExpiryFotSection) {
+            console.log("📦 Используем кэшированные товары");
+            return productsCacheForSection;
+        }
+        
+        console.log("🔄 Загружаем товары из API");
+        const response = await axios.get(`${TEMIR_API_BASE}/qr/products`);
+        const products = response.data;
+        
+        // Создаем мапу для быстрого поиска по ID
+        const productsMap = {};
+        products.forEach(product => {
+            productsMap[product.api_id] = {
+                id: product.id
+            };
+        });
+        
+        // Кэшируем на 30 минут
+        productsCacheForSection = productsMap;
+        cacheExpiryFotSection = Date.now() + (30 * 60 * 1000);
+        
+        console.log(`✅ Загружено ${products.length} товаров`);
+        return productsMap;
+        
+    } catch (error) {
+        console.error("❌ Ошибка загрузки товаров:", error.response?.status, error.response?.data);
+        return productsCacheForSection || {}; // Возвращаем старый кэш если есть
+    }
+}
+
 // Получение информации о товаре по ID
 async function getProductInfo(productId) {
     try {
@@ -1798,6 +1834,35 @@ async function getProductInfo(productId) {
     }
 }
 
+async function getProductInfoForSections(productId) {
+    try {
+        const products = await getAllProductsForSections();
+        
+        if (products[productId]) {
+            console.log(`✅ Товар найден в кэше: ${products[productId].title}`);
+            return products[productId];
+        } else {
+            console.log(`❓ Товар ${productId} не найден в кэше, запрашиваем отдельно`);
+            
+            // Fallback - запрашиваем конкретный товар
+            const response = await axios.get(`${TEMIR_API_BASE}/qr/products/${productId}`);
+            const product = response.data;
+            
+            return {
+                id: product.id
+            };
+        }
+        
+    } catch (error) {
+        console.error(`❌ Ошибка получения товара ${productId}:`, error.response?.status);
+        
+        return {
+            id: productId,
+            title: `Товар ${productId}`,
+            measure_unit: 'шт'
+        };
+    }
+}
 // Получение информации о филиалах
 async function getBranchInfo(branchId) {
     try {
@@ -1845,99 +1910,142 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     }
 }
 
+async function fetchAndConvertMenuData() {
+    try {
+        // Получаем данные из API
+        const response = await axios.get('https://ya.temir.me/qr/catalog');
+        const apiData = response.data;
+        
+        
+        // const optimizedMenuGroups = apiData.map(group => {
+        //     return group.map(section => {
+        //         section.products.map(id => await getProductInfoForSections(id))
+        //         return ({
+        //         section_title: section.section_title,
+        //         products: section.products
+        //     })});
+        // });
+
+        const optimizedMenuGroups = await Promise.all(
+  apiData.map(async (group) => {
+    return await Promise.all(
+      group.map(async (section) => {
+        const productIds = await Promise.all(
+          section.products.map(async (api_id) => {
+            const product = await getProductInfoForSections(api_id);
+            return product.id; // только id
+          })
+        );
+
+        return {
+            section_title: section.section_title,
+          products: productIds
+        };
+      })
+    );
+  })
+);
+        
+        return optimizedMenuGroups;
+    } catch (error) {
+        console.error('Ошибка при получении данных:', error.message);
+        return null;
+    }
+}
+
 // Оптимизированные группы товаров (6 сообщений вместо 12)
-const optimizedMenuGroups = [
-    // Группа 1: Роллы (первые 30)
-    [
-        {
-            section_title: "Роллы",
-            products: [
-                "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
-                "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
-                "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
-            ]
-        }
-    ],
+// const optimizedMenuGroups = [
+//     // Группа 1: Роллы (первые 30)
+//     [
+//         {
+//             section_title: "Роллы",
+//             products: [
+//                 "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
+//                 "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
+//                 "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
+//             ]
+//         }
+//     ],
     
-    // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
-    [
-        {
-            section_title: "Роллы (продолжение)",
-            products: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
-        },
-        {
-            section_title: "теплые",
-            products: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
-        },
-        {
-            section_title: "без риса",
-            products: ["136", "134", "135"]
-        },
-        {
-            section_title: "сладкие",
-            products: ["150", "139", "137", "138"]
-        }
-    ],
+//     // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
+//     [
+//         {
+//             section_title: "Роллы (продолжение)",
+//             products: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
+//         },
+//         {
+//             section_title: "теплые",
+//             products: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
+//         },
+//         {
+//             section_title: "без риса",
+//             products: ["136", "134", "135"]
+//         },
+//         {
+//             section_title: "сладкие",
+//             products: ["150", "139", "137", "138"]
+//         }
+//     ],
     
-    // Группа 3: Классические роллы + Темпура роллы (15 товаров)
-    [
-        {
-            section_title: "Классические роллы",
-            products: ["131", "130", "127", "133", "129", "128", "132"]
-        },
-        {
-            section_title: "Темпура роллы",
-            products: ["19", "17", "15", "21", "20", "18", "16", "22"]
-        },
-        {
-            section_title: "Круассаны",
-            products: ["93", "94", "92"]
-        }
-    ],
+//     // Группа 3: Классические роллы + Темпура роллы (15 товаров)
+//     [
+//         {
+//             section_title: "Классические роллы",
+//             products: ["131", "130", "127", "133", "129", "128", "132"]
+//         },
+//         {
+//             section_title: "Темпура роллы",
+//             products: ["19", "17", "15", "21", "20", "18", "16", "22"]
+//         },
+//         {
+//             section_title: "Круассаны",
+//             products: ["93", "94", "92"]
+//         }
+//     ],
     
-    // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
-    [
-        {
-            section_title: "Суши и гунканы",
-            products: [
-                "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
-                "77", "75", "73", "76", "74", "89", "88", "87", "90"
-            ]
-        }
-    ],
+//     // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
+//     [
+//         {
+//             section_title: "Суши и гунканы",
+//             products: [
+//                 "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
+//                 "77", "75", "73", "76", "74", "89", "88", "87", "90"
+//             ]
+//         }
+//     ],
     
-    // Группа 5: Сеты (24 товара)
-    [
-        {
-            section_title: "Сеты",
-            products: [
-                "109", "117", "123", "111", "112", "105", "103", "113", "118", 
-                "106", "119", "124", "121", "108", "110", "116", "125", "114", 
-                "104", "107", "122", "126", "120", "115"
-            ]
-        },
-        {
-            section_title: "Теплые сеты",
-            products: ["6", "3", "4", "1", "2", "5"]
-        }
-    ],
+//     // Группа 5: Сеты (24 товара)
+//     [
+//         {
+//             section_title: "Сеты",
+//             products: [
+//                 "109", "117", "123", "111", "112", "105", "103", "113", "118", 
+//                 "106", "119", "124", "121", "108", "110", "116", "125", "114", 
+//                 "104", "107", "122", "126", "120", "115"
+//             ]
+//         },
+//         {
+//             section_title: "Теплые сеты",
+//             products: ["6", "3", "4", "1", "2", "5"]
+//         }
+//     ],
     
-    // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
-    [
-        {
-            section_title: "Салаты",
-            products: ["98", "96", "95", "97", "99", "102", "101", "100"]
-        },
-        {
-            section_title: "Напитки",
-            products: ["13", "9", "8", "10", "12", "14", "7", "11"]
-        },
-        {
-            section_title: "Дополнительно",
-            products: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
-        }
-    ]
-];
+//     // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
+//     [
+//         {
+//             section_title: "Салаты",
+//             products: ["98", "96", "95", "97", "99", "102", "101", "100"]
+//         },
+//         {
+//             section_title: "Напитки",
+//             products: ["13", "9", "8", "10", "12", "14", "7", "11"]
+//         },
+//         {
+//             section_title: "Дополнительно",
+//             products: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
+//         }
+//     ]
+// ];
 
 async function sendCatalog(phone_no_id, to) {
     console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
@@ -1949,9 +2057,10 @@ async function sendCatalog(phone_no_id, to) {
             console.error("❌ CATALOG_ID не найден в переменных окружения");
             throw new Error("CATALOG_ID не настроен");
         }
+
         
         // Используем оптимизированные группы
-        const categoryGroups = optimizedMenuGroups;
+        const categoryGroups = await fetchAndConvertMenuData();
         
         console.log(`📊 Оптимизированная группировка:`);
         console.log(`   Исходно: 12 категорий`);
