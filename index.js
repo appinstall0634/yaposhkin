@@ -1771,7 +1771,7 @@ async function getAllProducts() {
 async function getAllProductsForSections() {
     try {
         // Проверяем кэш (обновляем каждые 30 минут)
-        if (productsCacheForSection && cacheExpiryFotSection && Date.now() < cacheExpiryFotSection) {
+        if (productsCacheForSection) {
             console.log("📦 Используем кэшированные товары");
             return productsCacheForSection;
         }
@@ -1790,9 +1790,8 @@ async function getAllProductsForSections() {
             };
         });
         
-        // Кэшируем на 30 минут
+        // Кэшируем 
         productsCacheForSection = productsMap;
-        cacheExpiryFotSection = Date.now() + (30 * 60 * 1000);
         
         console.log(`✅ Загружено ${products.length} товаров`);
         return productsMap;
