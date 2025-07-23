@@ -5,6 +5,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const fs = require('fs');
 const { MongoClient } = require('mongodb');
+const { time } = require("console");
 
 const PORT = process.env.PORT || 3000;
 
@@ -1783,7 +1784,9 @@ async function getAllProductsForSections() {
         const productsMap = {};
         products.forEach(product => {
             productsMap[product.api_id] = {
-                id: product.id
+                id: product.id,
+                api_id : product.api_id,
+                title : product.title
             };
         });
         
