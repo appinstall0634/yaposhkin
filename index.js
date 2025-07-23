@@ -1845,99 +1845,120 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     }
 }
 
+async function fetchAndConvertMenuData() {
+    try {
+        // Получаем данные из API
+        const response = await axios.get('https://ya.temir.me/qr/catalog');
+        const apiData = response.data;
+        
+        // Преобразуем данные в нужный формат
+        const optimizedMenuGroups = apiData.map(group => {
+            return group.map(section => ({
+                section_title: section.section_title,
+                products: section.products
+            }));
+        });
+        
+        return optimizedMenuGroups;
+    } catch (error) {
+        console.error('Ошибка при получении данных:', error.message);
+        return null;
+    }
+}
+
 // Оптимизированные группы товаров (6 сообщений вместо 12)
-const optimizedMenuGroups = [
-    // Группа 1: Роллы (первые 30)
-    [
-        {
-            title: "Роллы",
-            productIds: [
-                "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
-                "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
-                "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
-            ]
-        }
-    ],
+// const optimizedMenuGroups = [
+//     // Группа 1: Роллы (первые 30)
+//     [
+//         {
+//             section_title: "Роллы",
+//             products: [
+//                 "71", "46", "54", "58", "63", "62", "60", "61", "49", "48", 
+//                 "47", "50", "53", "72", "67", "70", "68", "69", "52", "51", 
+//                 "57", "64", "56", "59", "66", "65", "55", "38", "36", "37"
+//             ]
+//         }
+//     ],
     
-    // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
-    [
-        {
-            title: "Роллы (продолжение)",
-            productIds: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
-        },
-        {
-            title: "теплые",
-            productIds: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
-        },
-        {
-            title: "без риса",
-            productIds: ["136", "134", "135"]
-        },
-        {
-            title: "сладкие",
-            productIds: ["150", "139", "137", "138"]
-        }
-    ],
+//     // Группа 2: Роллы (оставшиеся) + Теплые роллы + Роллы без риса + Круассаны + Сладкие роллы (30 товаров)
+//     [
+//         {
+//             section_title: "Роллы (продолжение)",
+//             products: ["41", "35", "42", "44", "45", "43", "40", "39", "34"]
+//         },
+//         {
+//             section_title: "теплые",
+//             products: ["24", "26", "33", "28", "25", "27", "29", "30", "23", "31", "32"]
+//         },
+//         {
+//             section_title: "без риса",
+//             products: ["136", "134", "135"]
+//         },
+//         {
+//             section_title: "сладкие",
+//             products: ["150", "139", "137", "138"]
+//         }
+//     ],
     
-    // Группа 3: Классические роллы + Темпура роллы (15 товаров)
-    [
-        {
-            title: "Классические роллы",
-            productIds: ["131", "130", "127", "133", "129", "128", "132"]
-        },
-        {
-            title: "Темпура роллы",
-            productIds: ["19", "17", "15", "21", "20", "18", "16", "22"]
-        },
-        {
-            title: "Круассаны",
-            productIds: ["93", "94", "92"]
-        }
-    ],
+//     // Группа 3: Классические роллы + Темпура роллы (15 товаров)
+//     [
+//         {
+//             section_title: "Классические роллы",
+//             products: ["131", "130", "127", "133", "129", "128", "132"]
+//         },
+//         {
+//             section_title: "Темпура роллы",
+//             products: ["19", "17", "15", "21", "20", "18", "16", "22"]
+//         },
+//         {
+//             section_title: "Круассаны",
+//             products: ["93", "94", "92"]
+//         }
+//     ],
     
-    // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
-    [
-        {
-            title: "Суши и гунканы",
-            productIds: [
-                "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
-                "77", "75", "73", "76", "74", "89", "88", "87", "90"
-            ]
-        }
-    ],
+//     // Группа 4: Суши и гунканы + Теплые сеты (28 товаров)
+//     [
+//         {
+//             section_title: "Суши и гунканы",
+//             products: [
+//                 "85", "86", "81", "82", "91", "78", "84", "80", "79", "83", 
+//                 "77", "75", "73", "76", "74", "89", "88", "87", "90"
+//             ]
+//         }
+//     ],
     
-    // Группа 5: Сеты (24 товара)
-    [
-        {
-            title: "Сеты",
-            productIds: [
-                "109", "117", "123", "111", "112", "105", "103", "113", "118", 
-                "106", "119", "124", "121", "108", "110", "116", "125", "114", 
-                "104", "107", "122", "126", "120", "115"
-            ]
-        },
-        {
-            title: "Теплые сеты",
-            productIds: ["6", "3", "4", "1", "2", "5"]
-        }
-    ],
+//     // Группа 5: Сеты (24 товара)
+//     [
+//         {
+//             section_title: "Сеты",
+//             products: [
+//                 "109", "117", "123", "111", "112", "105", "103", "113", "118", 
+//                 "106", "119", "124", "121", "108", "110", "116", "125", "114", 
+//                 "104", "107", "122", "126", "120", "115"
+//             ]
+//         },
+//         {
+//             section_title: "Теплые сеты",
+//             products: ["6", "3", "4", "1", "2", "5"]
+//         }
+//     ],
     
-    // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
-    [
-        {
-            title: "Салаты",
-            productIds: ["98", "96", "95", "97", "99", "102", "101", "100"]
-        },
-        {
-            title: "Напитки",
-            productIds: ["13", "9", "8", "10", "12", "14", "7", "11"]
-        },
-        {
-            title: "Дополнительно",
-            productIds: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
-        }
-    ]
-];
+//     // Группа 6: Салаты + Напитки + Дополнительно (26 товаров)
+//     [
+//         {
+//             section_title: "Салаты",
+//             products: ["98", "96", "95", "97", "99", "102", "101", "100"]
+//         },
+//         {
+//             section_title: "Напитки",
+//             products: ["13", "9", "8", "10", "12", "14", "7", "11"]
+//         },
+//         {
+//             section_title: "Дополнительно",
+//             products: ["142", "141", "144", "140", "143", "147", "148", "149", "146", "145"]
+//         }
+//     ]
+// ];
 
 async function sendCatalog(phone_no_id, to) {
     console.log("=== ОТПРАВКА ОПТИМИЗИРОВАННОГО КАТАЛОГА ===");
@@ -1949,9 +1970,10 @@ async function sendCatalog(phone_no_id, to) {
             console.error("❌ CATALOG_ID не найден в переменных окружения");
             throw new Error("CATALOG_ID не настроен");
         }
+
         
         // Используем оптимизированные группы
-        const categoryGroups = optimizedMenuGroups;
+        const categoryGroups = await fetchAndConvertMenuData();
         
         console.log(`📊 Оптимизированная группировка:`);
         console.log(`   Исходно: 12 категорий`);
@@ -1959,8 +1981,8 @@ async function sendCatalog(phone_no_id, to) {
         console.log(`   💰 Экономия: ${12 - categoryGroups.length} сообщений`);
         
         categoryGroups.forEach((group, index) => {
-            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
-            const categoryNames = group.map(cat => cat.title).join(', ');
+            const totalProducts = group.reduce((sum, cat) => sum + cat.products.length, 0);
+            const categoryNames = group.map(cat => cat.section_title).join(', ');
             console.log(`   Группа ${index + 1}: ${group.length} категорий, ${totalProducts} товаров`);
             console.log(`     Категории: ${categoryNames}`);
         });
@@ -1969,7 +1991,7 @@ async function sendCatalog(phone_no_id, to) {
         for (let i = 0; i < categoryGroups.length; i++) {
             const group = categoryGroups[i];
             
-            const totalProducts = group.reduce((sum, cat) => sum + cat.productIds.length, 0);
+            const totalProducts = group.reduce((sum, cat) => sum + cat.products.length, 0);
             console.log(`📤 Отправляем группу ${i + 1}/${categoryGroups.length} (${totalProducts} товаров)`);
             
             await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId, lan);
@@ -2016,33 +2038,33 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
     try {
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
-            title: category.title,
-            product_items: category.productIds.map(id => ({
+            title: category.section_title,
+            product_items: category.products.map(id => ({
                 product_retailer_id: id
             }))
         }));
         
         // Подсчитываем общее количество товаров
-        const totalProducts = categories.reduce((sum, cat) => sum + cat.productIds.length, 0);
+        const totalProducts = categories.reduce((sum, cat) => sum + cat.products.length, 0);
         
         // Формируем умный заголовок
         let headerText;
         if (categories.length === 1) {
             // Одна категория
-            headerText = `🍣 ${categories[0].title}`;
+            headerText = `🍣 ${categories[0].section_title}`;
         } else if (categories.length === 2) {
             // Две категории
-            headerText = `🍣 ${categories[0].title} и ${categories[1].title}`;
+            headerText = `🍣 ${categories[0].section_title} и ${categories[1].section_title}`;
         } else if (categories.length === 3) {
             // Три категории
-            headerText = `🍣 ${categories[0].title}, ${categories[1].title} и ${categories[2].title}`;
+            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} и ${categories[2].section_title}`;
         } else if (categories.length === 4) {
             // Четыре категории
-            headerText = `🍣 ${categories[0].title}, ${categories[1].title}, ${categories[2].title} и ${categories[3].title}`;
+            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title}, ${categories[2].section_title} и ${categories[3].section_title}`;
         } else {
             // Много категорий - показываем первые две и количество остальных
             const remaining = categories.length - 2;
-            headerText = `🍣 ${categories[0].title}, ${categories[1].title} +${remaining} категорий`;
+            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} +${remaining} категорий`;
         }
         
         // Ограничиваем длину заголовка (WhatsApp имеет лимиты)
@@ -2114,7 +2136,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         console.error("❌ Ошибка отправки product_list с секциями:", error);
         
         // Если не получилось отправить product_list, отправляем обычное сообщение
-        const categoryNames = categories.map(cat => cat.title).join(', ');
+        const categoryNames = categories.map(cat => cat.section_title).join(', ');
         const fallbackText = `📱 Категории: ${categoryNames}\n\nПосмотрите наш каталог, выбрав меню в чате.`;
         await sendMessage(phone_no_id, to, fallbackText);
     }
