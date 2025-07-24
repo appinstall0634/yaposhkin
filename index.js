@@ -2671,7 +2671,7 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
     const emoji = getStatusEmoji(status);
     const statusText = getStatusText(status);
     
-    let message = `${emoji} ${statusText}\n\n`;
+    // let message = `${emoji} ${statusText}\n\n`;
     message += `📋 Заказ №${orderId}\n`;
 
     switch (status.toLowerCase()) {
