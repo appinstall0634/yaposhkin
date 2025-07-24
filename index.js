@@ -2648,7 +2648,7 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
         const message = formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo);
 
         // Отправляем сообщение
-        const response = await sendMessage(phone_no_id, customerPhone, message);
+        const response = await sendMessage(phone_no_id, customerPhone.replace("+", ""), message);
 
         console.log("✅ Уведомление о статусе заказа отправлено успешно");
         
@@ -2787,9 +2787,9 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
 // Функция получения эмодзи для статуса
 function getStatusEmoji(status) {
     const emojiMap = {
-        'confirmed': '✅',
+        'accepted': '✅',
         'подтвержден': '✅',
-        'preparing': '👨‍🍳',
+        'production': '👨‍🍳',
         'готовится': '👨‍🍳',
         'ready': '🎉',
         'готов': '🎉',
@@ -2811,9 +2811,9 @@ function getStatusEmoji(status) {
 // Функция получения текста статуса
 function getStatusText(status) {
     const statusMap = {
-        'confirmed': 'Заказ подтвержден',
+        'accepted': 'Заказ подтвержден',
         'подтвержден': 'Заказ подтвержден',
-        'preparing': 'Заказ готовится',
+        'production': 'Заказ готовится',
         'готовится': 'Заказ готовится',
         'ready': 'Заказ готов',
         'готов': 'Заказ готов',
