@@ -2675,28 +2675,28 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
     message += `📋 Заказ №${orderId}\n`;
 
     switch (status.toLowerCase()) {
-        case 'confirmed':
+        case 'accepted':
         case 'подтвержден':
             message += `✅ Ваш заказ подтвержден и принят в работу!\n\n`;
-            if (orderType === 'delivery') {
-                message += `🚗 Тип: Доставка\n`;
-                if (estimatedTime) {
-                    message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
-                }
-            } else {
-                message += `🏪 Тип: Самовывоз\n`;
-                if (locationTitle) {
-                    message += `📍 Филиал: ${locationTitle}\n`;
-                }
-                if (estimatedTime) {
-                    message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n`;
-                }
-            }
+            // if (orderType === 'delivery') {
+            //     message += `🚗 Тип: Доставка\n`;
+            //     if (estimatedTime) {
+            //         message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
+            //     }
+            // } else {
+            //     message += `🏪 Тип: Самовывоз\n`;
+            //     if (locationTitle) {
+            //         message += `📍 Филиал: ${locationTitle}\n`;
+            //     }
+            //     if (estimatedTime) {
+            //         message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n`;
+            //     }
+            // }
             message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
             break;
 
-        case 'preparing':
-        case 'готовится':
+        case 'production':
+        case 'Отправлен на кухню':
             message += `👨‍🍳 Наши повара готовят ваш заказ!\n\n`;
             if (estimatedTime) {
                 message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n\n`;
@@ -2704,24 +2704,24 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
             message += `🍣 Мы используем только свежие ингредиенты и готовим с любовью!`;
             break;
 
-        case 'ready':
-        case 'готов':
-            if (orderType === 'delivery') {
-                message += `🚗 Ваш заказ готов и передан курьеру!\n\n`;
-                message += `📍 Курьер уже в пути к вам.\n`;
-                if (estimatedTime) {
-                    message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
-                }
-                message += `\n📞 Курьер свяжется с вами перед прибытием.`;
-            } else {
-                message += `🎉 Ваш заказ готов к выдаче!\n\n`;
-                if (locationTitle) {
-                    message += `📍 Филиал: ${locationTitle}\n`;
-                }
-                message += `🏪 Приезжайте за заказом в удобное для вас время.\n`;
-                message += `\n💳 Оплата при получении.`;
-            }
-            break;
+        // case 'COMPLETED':
+        // case 'Завершен, но не передан пользователю':
+        //     if (orderType === 'delivery') {
+        //         message += `🚗 Ваш заказ готов и передан курьеру!\n\n`;
+        //         message += `📍 Курьер уже в пути к вам.\n`;
+        //         if (estimatedTime) {
+        //             message += `⏰ Ожидаемое время доставки: ${estimatedTime}\n`;
+        //         }
+        //         message += `\n📞 Курьер свяжется с вами перед прибытием.`;
+        //     } else {
+        //         message += `🎉 Ваш заказ готов к выдаче!\n\n`;
+        //         if (locationTitle) {
+        //             message += `📍 Филиал: ${locationTitle}\n`;
+        //         }
+        //         message += `🏪 Приезжайте за заказом в удобное для вас время.\n`;
+        //         message += `\n💳 Оплата при получении.`;
+        //     }
+        //     break;
 
         case 'out_for_delivery':
         case 'в_доставке':
