@@ -900,6 +900,7 @@ async function handleNewCustomerRegistration(phone_no_id, from, data) {
                 delivery_address: data.delivery_address,
                 preparation_time: data.preparation_time,
             specific_time: data.specific_time,
+            utensils_count: data.utensils_count === 'custom' ? data.custom_utensils_count : data.utensils_count,
             promo_code: data.promo_code,
             comment: data.comment,
             payment_method: data.payment_method
@@ -982,6 +983,7 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
             customer_name: data.customer_name,
             preparation_time: data.preparation_time,
             specific_time: data.specific_time,
+            utensils_count: data.utensils_count === 'custom' ? data.custom_utensils_count : data.utensils_count,
             promo_code: data.promo_code,
             comment: data.comment,
             payment_method: data.payment_method
