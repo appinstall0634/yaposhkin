@@ -400,16 +400,16 @@ async function handlePaymentConfirmation(phone_no_id, from, message) {
         await sendMessage(phone_no_id, from, "✅ Спасибо! Оформляем ваш заказ...");
         
         // Оформляем заказ с сохраненными данными
-        await submitOrder(
-            phone_no_id, 
-            from, 
-            userOrders.orderItems, 
-            userOrders.customerData, 
-            userOrders.locationId, 
-            userOrders.locationTitle, 
-            userOrders.orderType, 
-            userOrders.finalAmount
-        );
+        // await submitOrder(
+        //     phone_no_id, 
+        //     from, 
+        //     userOrders.orderItems, 
+        //     userOrders.customerData, 
+        //     userOrders.locationId, 
+        //     userOrders.locationTitle, 
+        //     userOrders.orderType, 
+        //     userOrders.finalAmount
+        // );
         
         
         
@@ -1166,6 +1166,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         let locationTitle = "";
         let orderType = userState.order_type || "pickup"; // Используем из состояния или по умолчанию самовывоз
         let deliveryAddress = "";
+        let utensils_count = userState.utensils_count
 
         console.log(`📋 Order type from state: ${orderType}`);
         console.log(`📋 Full userState:`, userState);
@@ -1361,7 +1362,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
             await setUserOrder(from, userOrders);
             await sendPaymentQRCodeImproved(phone_no_id, from, finalAmount)
     } 
-    await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount);
+    await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count);
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
@@ -1459,7 +1460,7 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
 }
 
 // Отправка заказа в API
-async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount) {
+async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count) {
     try {
         console.log("📝 Отправляем заказ в API");
         
@@ -1470,7 +1471,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             type: orderType,
             customerContact: {
                 firstName: "Test",
-                comment: "Test",
+                comment: `Test\nКоличество приборов: ${utensils_count}`,
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
