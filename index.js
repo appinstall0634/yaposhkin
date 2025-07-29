@@ -38,7 +38,8 @@ const WAITING_STATES = {
     FLOW_RESPONSE: 'flow_response',  // Ожидаем ответ от Flow
     LOCATION: 'location',            // Ожидаем местоположение
     CATALOG_ORDER: 'catalog_order',   // Ожидаем ответ от каталога
-    PAYMENT_CONFIRMATION: 'payment_confirmation'
+    ORDER_STATUS : 'order-status'
+    // PAYMENT_CONFIRMATION: 'payment_confirmation'
 };
 
 // Инициализация MongoDB
@@ -1508,9 +1509,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
         // Отправляем сообщение об успехе
         await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle);
 
-        // Очищаем состояние
-        await deleteUserState(from);
-        await clearUserWaitingState(from);
+        
 
     } catch (error) {
         console.error('❌ Ошибка отправки заказа в API:', error);
@@ -1685,15 +1684,21 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
             successMessage += lan==='kg' ? `💰 Төлөө турган сумма: ${finalAmount} сом\n\n` : `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
             successMessage += lan==='kg' ? '⏳ Чоо-жайын ырастоо үчүн менеджерибиздин чалуусун күтүңүз.\n\n' : '⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.\n\n';
             successMessage += lan==='kg' ? '📞 Суроолоруңуз болсо, биз менен телефон аркылуу байланышсаңыз же бул чатта жазсаңыз болот.' : '📞 Если у вас есть вопросы, вы можете связаться с нами по телефону или написать в этот чат.';
+
+            await setUserWaitingState(from, WAITING_STATES.ORDER_STATUS);
         } else {
             successMessage = lan==='kg' ? '❌ Буйрутмаңызды берүү учурунда ката кетти.\n' : '❌ Произошла ошибка при оформлении заказа.\n';
             successMessage += lan==='kg' ? 'Биздин менеджер чоо-жайын тактоо үчүн сиз менен байланышат.' : 'Наш менеджер свяжется с вами для уточнения деталей.';
+            await deleteUserState(from);
+            await clearUserWaitingState(from);
         }
 
         await sendMessage(phone_no_id, from, successMessage);
         
     } catch (error) {
         console.error('❌ Ошибка отправки сообщения об успехе:', error);
+        await deleteUserState(from);
+        await clearUserWaitingState(from);
     }
 }
 
@@ -2648,7 +2653,7 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
         console.log(`📱 Отправляем уведомление о статусе "${status}" для заказа ${orderId} клиенту ${customerPhone}`);
 
         // Формируем сообщение в зависимости от статуса
-        const message = formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo);
+        const message = formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, customerPhone.replace("+", ""));
 
         // Отправляем сообщение
         const response = await sendMessage(phone_no_id, customerPhone.replace("+", ""), message);
@@ -2670,9 +2675,11 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
 }
 
 // Функция форматирования сообщений для разных статусов
-function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo) {
+async function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, from) {
     const emoji = getStatusEmoji(status);
     const statusText = getStatusText(status);
+
+    const lan = await getUserLan(from);
     
     let message = ``;
     message += `📋 Заказ №${orderId}\n`;
@@ -2680,7 +2687,13 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
     switch (status.toLowerCase()) {
         case 'accepted':
         case 'подтвержден':
-            message += `✅ Ваш заказ подтвержден и принят в работу!\n\n`;
+            if(lan==='ru'){
+                message += `✅ Ваш заказ подтвержден и принят в работу!\n\n`;
+                message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
+            }else{
+                message += `✅ Буйрутмаңыз ырасталды жана иштетүүгө кабыл алынды!\n\n`;
+                message += `\n📞 Суроолоруңуз болсо, биз менен байланышыңыз.`;
+            }
             // if (orderType === 'delivery') {
             //     message += `🚗 Тип: Доставка\n`;
             //     if (estimatedTime) {
@@ -2695,16 +2708,18 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
             //         message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n`;
             //     }
             // }
-            message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
             break;
 
         case 'production':
         case 'Отправлен на кухню':
-            message += `👨‍🍳 Наши повара готовят ваш заказ!\n\n`;
-            if (estimatedTime) {
-                message += `⏰ Ожидаемое время готовности: ${estimatedTime}\n\n`;
+            if(lan==='ru'){
+                message += `👨‍🍳 Наши повара готовят ваш заказ!\n\n`;
+                message += `🍣 Мы используем только свежие ингредиенты и готовим с любовью!`;
+            }else{
+                message += `👨‍🍳 Биздин ашпозчулар буйрутмаңызды даярдап жатышат!\n\n`;
+                message += `🍣 Биз жаңы ингредиенттерди гана колдонобуз жана сүйүп тамак жасайбыз!`;
             }
-            message += `🍣 Мы используем только свежие ингредиенты и готовим с любовью!`;
+            
             break;
 
         // case 'COMPLETED':
@@ -2746,21 +2761,36 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
 
         case 'completed':
         case 'выполнен':
-            message += `✅ Заказ выполнен!\n\n`;
-            message += `🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-            message += `⭐ Будем рады вашему отзыву о качестве блюд и сервисе.\n`;
-            message += `\n🍣 Ждем вас снова!`;
+             if(lan==='ru'){
+                message += `✅ Заказ выполнен!\n\n`;
+                message += `🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+                // message += `⭐ Будем рады вашему отзыву о качестве блюд и сервисе.\n`;
+                message += `\n🍣 Ждем вас снова!`;
+            }else{
+                message += `✅ Буйрутма даяр болду!\n\n`;
+                message += `🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
+                // message += `⭐ Будем рады вашему отзыву о качестве блюд и сервисе.\n`;
+                message += `\n🍣 Биз сизди дагы күтөбүз!`;
+            }
+             await deleteUserState(from);
+             await clearUserWaitingState(from);
             break;
 
         case 'cancelled':
         case 'отменен':
-            message += `❌ Заказ отменен\n\n`;
-            if (additionalInfo) {
-                message += `📝 Причина: ${additionalInfo}\n\n`;
+            if(lan==='ru'){
+                message += `❌ Заказ отменен\n\n`;
+                message += `😔 Приносим извинения за неудобства.\n`;
+                message += `📞 Если у вас есть вопросы, свяжитесь с нами.\n`;
+                message += `\n🍣 Будем рады видеть вас снова!`;
+            }else{
+                message += `❌ Буйрутма жокко чыгарылды\n\n`;
+                message += `😔 Ыңгайсыздык үчүн кечирим сурайбыз.\n`;
+                message += `📞 Суроолоруңуз болсо, биз менен байланышыңыз.\n`;
+                message += `\n🍣 Биз сизди дагы бир жолу көрүүнү чыдамсыздык менен күтөбүз!`;
             }
-            message += `😔 Приносим извинения за неудобства.\n`;
-            message += `📞 Если у вас есть вопросы, свяжитесь с нами.\n`;
-            message += `\n🍣 Будем рады видеть вас снова!`;
+             await deleteUserState(from);
+             await clearUserWaitingState(from);
             break;
 
         case 'delayed':
@@ -2783,6 +2813,10 @@ function formatOrderStatusMessage(orderId, status, orderType, locationTitle, est
             }
             message += `📞 Если у вас есть вопросы, свяжитесь с нами.`;
     }
+
+    // Очищаем состояние
+        // await deleteUserState(from);
+        // await clearUserWaitingState(from);
 
     return message;
 }
