@@ -2658,7 +2658,7 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
         console.log(`📱 Отправляем уведомление о статусе "${status}" для заказа ${orderId} клиенту ${customerPhone}`);
 
         // Формируем сообщение в зависимости от статуса
-        const message = formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, customerPhone.replace("+", ""));
+        const message = await formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, customerPhone.replace("+", ""));
 
         // Отправляем сообщение
         const response = await sendMessage(phone_no_id, customerPhone.replace("+", ""), message);
@@ -2684,7 +2684,7 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
     const emoji = getStatusEmoji(status);
     const statusText = getStatusText(status);
 
-    // const lan = await getUserLan(from);
+    const lan = await getUserLan(from);
     
     let message = ``;
     message += `📋 Заказ №${orderId}\n`;
