@@ -42,6 +42,11 @@ const WAITING_STATES = {
     // PAYMENT_CONFIRMATION: 'payment_confirmation'
 };
 
+const contact_branch = {
+    '1' : '0709063676',
+    '15' : '0705063676'
+}
+
 // Инициализация MongoDB
 async function initMongoDB() {
     try {
@@ -1507,7 +1512,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
         }
         
         // Отправляем сообщение об успехе
-        await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle);
+        await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle, locationId);
 
         
 
@@ -1665,7 +1670,7 @@ async function getLocationWorkingHours(locationId) {
 }
 
 // Отправка сообщения об успешном заказе
-async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orderType, finalAmount, locationTitle) {
+async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orderType, finalAmount, locationTitle, locationId) {
     const lan = await getUserLan(from);
     try {
         let successMessage = '';
@@ -1683,12 +1688,12 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
 
             successMessage += lan==='kg' ? `💰 Төлөө турган сумма: ${finalAmount} сом\n\n` : `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
             successMessage += lan==='kg' ? '⏳ Чоо-жайын ырастоо үчүн менеджерибиздин чалуусун күтүңүз.\n\n' : '⏳ Ожидайте звонка от нашего менеджера для подтверждения деталей.\n\n';
-            successMessage += lan==='kg' ? '📞 Суроолоруңуз болсо, биз менен телефон аркылуу байланышсаңыз же бул чатта жазсаңыз болот.' : '📞 Если у вас есть вопросы, вы можете связаться с нами по телефону или написать в этот чат.';
+            successMessage += lan==='kg' ? `📞 Суроолоруңуз болсо, биз менен телефон аркылуу байланышсаңыз болот ${contact_branch[locationId]}.` : `📞 Если у вас есть вопросы, вы можете связаться с нами по телефону ${contact_branch[locationId]}.`;
 
             await setUserWaitingState(from, WAITING_STATES.ORDER_STATUS);
         } else {
             successMessage = lan==='kg' ? '❌ Буйрутмаңызды берүү учурунда ката кетти.\n' : '❌ Произошла ошибка при оформлении заказа.\n';
-            successMessage += lan==='kg' ? 'Биздин менеджер чоо-жайын тактоо үчүн сиз менен байланышат.' : 'Наш менеджер свяжется с вами для уточнения деталей.';
+            successMessage += lan==='kg' ? `Биздин менеджер чоо-жайын тактоо үчүн байланышсаңыз болот ${contact_branch[locationId]}.` : `Для уточнения деталей вы можете связаться с нами по телефону ${contact_branch[locationId]}.`;
             await deleteUserState(from);
             await clearUserWaitingState(from);
         }
@@ -2689,10 +2694,10 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
         case 'подтвержден':
             if(lan==='ru'){
                 message += `✅ Ваш заказ подтвержден и принят в работу!\n\n`;
-                message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
+                // message += `\n📞 Если у вас есть вопросы, свяжитесь с нами.`;
             }else{
                 message += `✅ Буйрутмаңыз ырасталды жана иштетүүгө кабыл алынды!\n\n`;
-                message += `\n📞 Суроолоруңуз болсо, биз менен байланышыңыз.`;
+                // message += `\n📞 Суроолоруңуз болсо, биз менен байланышыңыз.`;
             }
             // if (orderType === 'delivery') {
             //     message += `🚗 Тип: Доставка\n`;
@@ -2745,9 +2750,6 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
         case 'в_доставке':
             message += `🚗 Курьер в пути!\n\n`;
             message += `📍 Ваш заказ доставляется по указанному адресу.\n`;
-            if (estimatedTime) {
-                message += `⏰ Ожидаемое время прибытия: ${estimatedTime}\n`;
-            }
             message += `\n📞 Курьер свяжется с вами при приближении к адресу.`;
             break;
 
