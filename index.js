@@ -824,7 +824,7 @@ async function sendExistingCustomerFlowKy(phone_no_id, from, customer, branches)
             type: "flow",
             header: {
                 type: "text",
-                text: "🛒 Заказ беруу"
+                text: "🛒 Буйрутма беруу"
             },
             body: {
                 text: `Салам, ${customer.first_name}!`
@@ -838,7 +838,7 @@ async function sendExistingCustomerFlowKy(phone_no_id, from, customer, branches)
                     flow_message_version: "3",
                     flow_token: `existing_customer_${Date.now()}`,
                     flow_id: ORDER_FLOW_ID_KY,
-                    flow_cta: "Заказ беруу",
+                    flow_cta: "Буйрутма беруу",
                     flow_action: "navigate",
                     flow_action_payload: {
                         screen: "ORDER_TYPE",
@@ -1084,7 +1084,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
         const order = message.order;
         
         // Формируем информацию о заказе
-        let orderSummary = lan === 'kg' ? "🛒 Сиздин заказыныз:\n\n" :"🛒 Ваш заказ:\n\n";
+        let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\n\n" :"🛒 Ваш заказ:\n\n";
         let totalAmount = 0;
         let orderItems = [];
         
@@ -2688,7 +2688,11 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
     const userState = await getUserState(from);
     
     let message = ``;
-    message += `📋 Заказ №${orderId}\n`;
+    if(lan==='ru'){
+        message += `📋 Заказ №${orderId}\n`;
+    }else{
+        message += `📋 Буйрутма №${orderId}\n`;
+    }
 
     switch (status.toLowerCase()) {
         case 'accepted':
