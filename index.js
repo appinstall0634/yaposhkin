@@ -1472,7 +1472,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
             type: orderType,
             customerContact: {
                 firstName: "Test",
-                comment: `Test\nКоличество приборов: ${utensils_count}`,
+                comment: (utensils_count && utensils_count !== '0') ? `Test\nКоличество приборов: ${utensils_count}` : `Test`,
                 contactMethod: {
                     type: "phoneNumber",
                     value: from
