@@ -2252,7 +2252,7 @@ async function sendMessage(phone_no_id, to, text) {
         messaging_product: "whatsapp",
         to: to,
         text: {
-            body: text
+            body: text || "Сообщение"
         }
     };
 
@@ -2684,7 +2684,7 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
     const emoji = getStatusEmoji(status);
     const statusText = getStatusText(status);
 
-    const lan = await getUserLan(from);
+    // const lan = await getUserLan(from);
     
     let message = ``;
     message += `📋 Заказ №${orderId}\n`;
