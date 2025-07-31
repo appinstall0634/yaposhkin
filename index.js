@@ -1,6 +1,5 @@
 const { generateText } = require('ai');
 const { openai } = require('@ai-sdk/openai');
-
 const express = require("express");
 const body_parser = require("body-parser");
 const axios = require("axios");
