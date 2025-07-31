@@ -936,7 +936,7 @@ async function sendNewCustomerFlowKy(phone_no_id, from, branches) {
                 text: "🍣 Yaposhkin Rolls"
             },
             body: {
-                text: "Кош келиңиз!"
+                text: "Кош келиңиз!\n\nДобро пожаловать!"
             },
             footer: {
                 text: "Каттоо формасын толтурунуз"
