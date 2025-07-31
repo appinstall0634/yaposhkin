@@ -1,3 +1,6 @@
+const { generateText } = require('ai');
+const { openai } = require('@ai-sdk/openai');
+
 const express = require("express");
 const body_parser = require("body-parser");
 const axios = require("axios");
@@ -45,6 +48,174 @@ const WAITING_STATES = {
 const contact_branch = {
     '1' : '0709063676',
     '15' : '0705063676'
+}
+
+async function analyzeCustomerIntent(messageText) {
+    try {
+        console.log("🤖 Анализируем намерение клиента с GPT-4o:", messageText);
+        
+        const { text } = await generateText({
+            model: openai('gpt-4o'),
+            messages: [
+                {
+                    role: 'system',
+                    content: `Ты эксперт-аналитик намерений клиентов ресторана японской кухни "Yaposhkin Rolls".
+
+🎯 ГЛАВНАЯ ЗАДАЧА: Определить хочет ли клиент ЗАКАЗАТЬ ЕДУ прямо сейчас или у него ДРУГИЕ ВОПРОСЫ.
+
+📋 КОНТЕКСТ: Клиенты пишут в WhatsApp бот ресторана роллов и суши.
+
+🌐 ЯЗЫКИ: Анализируй сообщения на русском и кыргызском языках с высокой точностью.
+
+✅ ЗАКАЗ ЕДЫ (ORDER_INTENT) - если клиент:
+• Хочет заказать: "заказ", "хочу заказать", "буду заказывать", "оформить заказ"
+• Кыргызский: "буйрутма", "буйрутма берүү", "заказ кылгым келет", "тапшырма берүү"
+• Интересуется едой: "меню", "каталог", "роллы", "суши", "что есть", "посмотреть блюда"
+• Кыргызский: "меню", "каталог", "роллдор", "суши", "эмне бар", "тамактарды көрүү"
+• Доставка: "доставка", "привезите", "доставить", "жеткирүү", "алып келиңиз"
+• Приветствие + еда: "привет, голодный", "салам, ачка болдум"
+• Эмодзи еды: 🍣🍱🍜🥢🍤
+• Просто приветствие в контексте ресторана
+
+❌ ДРУГИЕ ВОПРОСЫ (OTHER_INTENT) - если клиент:
+• Режим работы: "часы работы", "когда работаете", "график", "иш убактысы", "канча убакытта"
+• Адреса: "где находитесь", "адрес", "филиалы", "кайда жайгашкан", "дарек"
+• Контакты: "телефон", "как связаться", "телефон номери", "кантип байланышуу"
+• Жалобы: "плохо", "невкусно", "проблема", "жалоба", "жаман", "көйгөй"
+• Общие вопросы: "что это", "кто вы", "бул эмне", "сиздер ким"
+
+🎯 ФОРМАТ ОТВЕТА (строго):
+ORDER_INTENT|ru - для заказа на русском
+ORDER_INTENT|kg - для заказа на кыргызском  
+OTHER_INTENT|ru - для других вопросов на русском
+OTHER_INTENT|kg - для других вопросов на кыргызском
+
+📝 ПРИМЕРЫ:
+"Привет, хочу роллы заказать" → ORDER_INTENT|ru
+"Салам аке, буйрутма кылгым келет" → ORDER_INTENT|kg
+"🍣 меню покажите" → ORDER_INTENT|ru
+"Канча убакытта иштейсиздер?" → OTHER_INTENT|kg
+"Где ваш адрес?" → OTHER_INTENT|ru
+"Здравствуйте" → ORDER_INTENT|ru (приветствие в ресторане = намерение заказать)`
+                },
+                {
+                    role: 'user',
+                    content: messageText
+                }
+            ],
+            maxTokens: 20,
+            temperature: 0.0
+        });
+
+        console.log("🤖 AI ответ:", text);
+        
+        // Парсим ответ
+        const parts = text.trim().split('|');
+        if (parts.length >= 2) {
+            const intent = parts[0];
+            const language = parts[1];
+            
+            return {
+                isOrderIntent: intent === 'ORDER_INTENT',
+                language: language,
+                originalText: messageText
+            };
+        }
+        
+        // Fallback - считаем что хочет заказать
+        return {
+            isOrderIntent: true,
+            language: 'ru',
+            originalText: messageText
+        };
+        
+    } catch (error) {
+        console.error("❌ Ошибка анализа намерения:", error);
+        
+        // Fallback анализ по ключевым словам
+        return analyzeIntentFallback(messageText);
+    }
+}
+
+// Fallback функция анализа намерения (если AI недоступен)
+function analyzeIntentFallback(messageText) {
+    console.log("🔄 Используем fallback анализ намерения");
+    
+    const text = messageText.toLowerCase();
+    
+    // Ключевые слова для заказа на русском
+    const orderKeywordsRu = [
+        'заказ', 'заказать', 'хочу', 'буду', 'доставка', 'доставить',
+        'меню', 'каталог', 'роллы', 'суши', 'еда', 'поесть',
+        'привет', 'здравствуйте', 'добрый', 'салют', '🍣', '🍱', '🍜'
+    ];
+    
+    // Ключевые слова для заказа на кыргызском  
+    const orderKeywordsKg = [
+        'буйрутма', 'буйрутма', 'кылгым', 'берүү', 'жеткирүү',
+        'меню', 'каталог', 'роллдор', 'суши', 'тамак', 'жеп',
+        'салам', 'кандайсыз', 'жакшы', 'кутман'
+    ]; 
+    
+    // Ключевые слова НЕ для заказа
+    const otherKeywordsRu = [
+        'часы работы', 'время работы', 'график', 'адрес', 'где находитесь',
+        'телефон', 'контакты', 'жалоба', 'проблема', 'качество', 'не вкусно'
+    ];
+    
+    const otherKeywordsKg = [
+        'иш убактысы', 'канча убакытта', 'дарек', 'кайда жайгашкан',
+        'телефон', 'байланыш', 'арыз', 'көйгөй', 'сапаты', 'жаман'
+    ];
+    
+    // Определяем язык
+    let language = 'ru';
+    const hasKgWords = orderKeywordsKg.some(word => text.includes(word)) || 
+                      otherKeywordsKg.some(word => text.includes(word));
+    if (hasKgWords) {
+        language = 'kg';
+    }
+    
+    // Проверяем намерение заказа
+    const hasOrderIntent = orderKeywordsRu.some(word => text.includes(word)) ||
+                          orderKeywordsKg.some(word => text.includes(word));
+    
+    // Проверяем другие намерения
+    const hasOtherIntent = otherKeywordsRu.some(word => text.includes(word)) ||
+                          otherKeywordsKg.some(word => text.includes(word));
+    
+    return {
+        isOrderIntent: hasOrderIntent && !hasOtherIntent,
+        language: language,
+        originalText: messageText
+    };
+}
+
+
+// Функция для тестирования GPT-4o подключения
+async function testGPT4oConnection() {
+    try {
+        console.log("🧪 Тестируем подключение к GPT-4o...");
+        
+        const { text } = await generateText({
+            model: openai('gpt-4o'),
+            messages: [
+                {
+                    role: 'user',
+                    content: 'Ответь одним словом: "Работает"'
+                }
+            ],
+            maxTokens: 10,
+            temperature: 0.0
+        });
+
+        console.log("✅ GPT-4o подключен успешно:", text);
+        return true;
+        
+    } catch (error) {
+        console.error("❌ Ошибка подключения к GPT-4o:", error.message);
+        return false;
+    }
 }
 
 // Инициализация MongoDB
@@ -278,24 +449,29 @@ async function getUserStatesStats() {
     }
 }
 
-// Запуск сервера
 async function startServer() {
     try {
         // Инициализируем MongoDB
         await initMongoDB();
+
+        // Тестируем GPT-4o
+        const gptWorking = await testGPT4oConnection();
+        if (!gptWorking) {
+            console.log("⚠️ GPT-4o недоступен, будет использоваться fallback анализ");
+        }
 
         await getAllProductsForSections();
         
         app.listen(PORT, () => {
             console.log("webhook is listening");
             console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+            console.log(`🤖 AI модель: GPT-4o ${gptWorking ? '✅' : '❌'}`);
         });
     } catch (error) {
         console.error("❌ Ошибка запуска сервера:", error);
         process.exit(1);
     }
 }
-
 // Запускаем сервер
 startServer();
 
@@ -366,17 +542,16 @@ app.post("/webhook", async (req, res) => {
                     await handleCatalogOrderResponse(phone_no_id, from, message);
                 } 
                 else if (message.type === "text" && currentWaitingState === WAITING_STATES.NONE){
-                    // Любое другое сообщение
-                    console.log("📝 Обрабатываем обычное сообщение");
-                    await sendOrderConfirmationButtons(phone_no_id, from);
-                }else if (message.type === "interactive" && 
-                   message.interactive.type === "button_reply" && 
-                   currentWaitingState === WAITING_STATES.LANG){
-                    // Любое другое сообщение
-                    console.log("📝 Обрабатываем сообщение от кнопки");
-                    await handleOrderConfirmationButton(phone_no_id, from, message);
-                    // await handleIncomingMessage(phone_no_id, from, message);
-                }else{
+    // Любое другое сообщение
+    console.log("📝 Обрабатываем обычное сообщение с анализом намерения");
+    await handleIncomingMessage(phone_no_id, from, message); // Убираем третий параметр
+}else if (message.type === "interactive" && 
+   message.interactive.type === "button_reply" && 
+   currentWaitingState === WAITING_STATES.LANG){
+    // Обработка кнопки выбора языка
+    console.log("📝 Обрабатываем сообщение от кнопки выбора языка");
+    await handleOrderConfirmationButton(phone_no_id, from, message);
+}else{
 
                 }
             } catch (error) {
@@ -429,7 +604,9 @@ async function handlePaymentConfirmation(phone_no_id, from, message) {
 async function handleOrderConfirmationButton(phone_no_id, from, message) {
     try {
         const buttonId = message.interactive.button_reply.id;
-        console.log("🔘 Нажата кнопка:", buttonId);
+        console.log("🔘 Нажата кнопка выбора языка:", buttonId);
+        
+        // Передаем язык как параметр в handleIncomingMessage
         await handleIncomingMessage(phone_no_id, from, message, buttonId);
         
     } catch (error) {
@@ -574,15 +751,63 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
 }
 
 // Обработка входящих сообщений - проверка клиента
-async function handleIncomingMessage(phone_no_id, from, message, lan) {
-    console.log("=== ПРОВЕРКА КЛИЕНТА ===");
+async function handleIncomingMessage(phone_no_id, from, message, buttonLang = null) {
+    console.log("=== АНАЛИЗ НАМЕРЕНИЯ КЛИЕНТА ===");
     
-    const messageText = message.text?.body?.toLowerCase();
+    const messageText = message.text?.body;
     
-    // Проверяем если это команда для заказа или любое текстовое сообщение
-    console.log(`Получено сообщение от ${from}: ${messageText || 'не текст'}`);
+    if (!messageText) {
+        console.log("❌ Нет текста сообщения");
+        return;
+    }
+
+    console.log(`Получено сообщение от ${from}: ${messageText}`);
     
-    await checkCustomerAndSendFlow(phone_no_id, from, lan);
+    // Если это ответ от кнопки выбора языка, используем переданный язык
+    if (buttonLang) {
+        console.log(`🔘 Обработка кнопки языка: ${buttonLang}`);
+        await checkCustomerAndSendFlow(phone_no_id, from, buttonLang);
+        return;
+    }
+    
+    try {
+        // Анализируем намерение клиента с помощью AI
+        const intentAnalysis = await analyzeCustomerIntent(messageText);
+        
+        console.log("🎯 Результат анализа намерения:", intentAnalysis);
+        
+        if (intentAnalysis.isOrderIntent) {
+            // Клиент хочет заказать - отправляем выбор языка
+            console.log("✅ Клиент хочет заказать - отправляем выбор языка");
+            await sendOrderConfirmationButtons(phone_no_id, from);
+        } else {
+            // Клиент задает другие вопросы - направляем к менеджеру
+            console.log("❓ Клиент задает вопросы не о заказе - направляем к менеджеру");
+            await sendManagerContactMessage(phone_no_id, from, intentAnalysis.language);
+        }
+        
+    } catch (error) {
+        console.error("❌ Ошибка анализа намерения:", error);
+        
+        // В случае ошибки AI - отправляем выбор языка (безопасный fallback)
+        console.log("🔄 Fallback - отправляем выбор языка");
+        await sendOrderConfirmationButtons(phone_no_id, from);
+    }
+}
+
+// Функция отправки сообщения о контакте с менеджером
+async function sendManagerContactMessage(phone_no_id, from, language) {
+    console.log(`📞 Отправляем контакт менеджера на языке: ${language}`);
+    
+    let message;
+    
+    if (language === 'kg') {
+        message = `Саламатсызбы! 🙋‍♀️\n\nБул суроолор боюнча биздин кызматкерибиз менен төмөнкү номер аркылуу байланыша аласыз:\n\n📱 +996559956523\n\nБуйрутма берүү үчүн кайра жазсаңыз болот! 🍣`;
+    } else {
+        message = `Здравствуйте! 🙋‍♀️\n\nПо данным вопросам можете связаться с нашим сотрудником по номеру:\n\n📱 +996559956523\n\nДля оформления заказа можете написать нам снова! 🍣`;
+    }
+    
+    await sendMessage(phone_no_id, from, message);
 }
 
 // Проверка клиента и отправка соответствующего Flow
