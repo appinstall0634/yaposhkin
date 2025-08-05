@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { MongoClient } = require('mongodb');
 const { time } = require("console");
+const path = require('path');
 
 const PORT = process.env.PORT || 3500;
 
@@ -955,6 +956,7 @@ async function sendPickupAddressResponse(phone_no_id, from, language) {
 }
 
 // 4. Ответ с меню (PDF файл)
+// 4. Ответ с меню (исправленная версия для AWS Lambda)
 async function sendMenuResponse(phone_no_id, from, language) {
     try {
         // Сначала отправляем текстовое сообщение
@@ -968,34 +970,56 @@ async function sendMenuResponse(phone_no_id, from, language) {
         
         await sendMessage(phone_no_id, from, textMessage);
         
-        // Читаем локальный PDF файл
-        const menuPdfPath = './assets/menu.pdf'; // Путь к вашему локальному PDF файлу
+        // Определяем путь к файлу в зависимости от среды
+        const possiblePaths = [
+            './assets/menu.pdf',           // Локальная разработка
+            '/var/task/assets/menu.pdf',   // AWS Lambda
+            path.join(__dirname, 'assets', 'menu.pdf'), // Универсальный путь
+            path.join(process.cwd(), 'assets', 'menu.pdf') // Рабочая директория
+        ];
         
-        // Проверяем существование файла
-        if (!fs.existsSync(menuPdfPath)) { 
-            throw new Error('PDF файл меню не найден');
+        let menuPdfPath = null;
+        
+        // Ищем файл по всем возможным путям
+        for (const filePath of possiblePaths) {
+            if (fs.existsSync(filePath)) {
+                menuPdfPath = filePath;
+                console.log(`✅ PDF файл найден по пути: ${filePath}`);
+                break;
+            } else {
+                console.log(`❌ Файл не найден по пути: ${filePath}`);
+            }
         }
         
-        // Читаем файл как base64
-        const pdfBuffer = fs.readFileSync(menuPdfPath);
-        const pdfBase64 = pdfBuffer.toString('base64');
+        // Если файл не найден, выводим отладочную информацию
+        if (!menuPdfPath) {
+            console.log("🔍 Отладочная информация:");
+            console.log("__dirname:", __dirname);
+            console.log("process.cwd():", process.cwd());
+            console.log("Содержимое текущей директории:", fs.readdirSync(process.cwd()));
+            
+            // Проверяем есть ли папка assets
+            const assetsPath = path.join(process.cwd(), 'assets');
+            if (fs.existsSync(assetsPath)) {
+                console.log("Содержимое папки assets:", fs.readdirSync(assetsPath));
+            } else {
+                console.log("Папка assets не найдена");
+            }
+            
+            throw new Error('PDF файл меню не найден ни по одному из путей');
+        }
         
-        // Формируем сообщение с PDF
-        const documentMessage = {
-            messaging_product: "whatsapp",
-            to: from,
-            type: "document",
+        // Читаем файл
+        const pdfBuffer = fs.readFileSync(menuPdfPath);
+        console.log(`📄 PDF файл прочитан, размер: ${pdfBuffer.length} байт`);
+        
+        // Отправляем через Media API
+        await sendLocalPdfDocument(phone_no_id, from, menuPdfPath, {
             document: {
-                id: null, // Для base64 не нужен
                 filename: language === 'kg' ? "Yaposhkin_Rolls_Menu_KG.pdf" : "Yaposhkin_Rolls_Menu_RU.pdf",
                 caption: language === 'kg' ? "📋 Yaposhkin Rolls меню" : "📋 Меню Yaposhkin Rolls"
             }
-        };
-        
-        console.log("📄 Отправляем локальный PDF файл меню");
-        
-        // Отправляем через Media API (нужно сначала загрузить файл)
-        await sendLocalPdfDocument(phone_no_id, from, menuPdfPath, documentMessage);
+        });
         
     } catch (error) {
         console.error("❌ Ошибка отправки локального меню:", error);
@@ -1012,16 +1036,29 @@ async function sendMenuResponse(phone_no_id, from, language) {
     }
 }
 
-// Функция для отправки локального PDF документа
+// Функция для отправки локального PDF документа (обновленная)
 async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage) {
     try {
         console.log("📤 Загружаем локальный PDF в WhatsApp Media API");
         
+        // Проверяем размер файла
+        const stats = fs.statSync(filePath);
+        const fileSizeInMB = stats.size / (1024 * 1024);
+        console.log(`📊 Размер файла: ${fileSizeInMB.toFixed(2)} MB`);
+        
+        if (fileSizeInMB > 16) {
+            throw new Error(`Файл слишком большой: ${fileSizeInMB.toFixed(2)} MB (максимум 16 MB)`);
+        }
+        
         // Шаг 1: Загружаем файл в WhatsApp Media API
+        const FormData = require('form-data');
         const formData = new FormData();
         const fileStream = fs.createReadStream(filePath);
         
-        formData.append('file', fileStream);
+        formData.append('file', fileStream, {
+            filename: documentMessage.document.filename,
+            contentType: 'application/pdf'
+        });
         formData.append('type', 'application/pdf');
         formData.append('messaging_product', 'whatsapp');
         
@@ -1033,7 +1070,9 @@ async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     ...formData.getHeaders()
-                }
+                },
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
             }
         );
         
