@@ -847,7 +847,7 @@ async function handleIncomingMessage(phone_no_id, from, message, buttonLang = nu
     
     if (!messageText) {
         console.log("❌ Нет текста сообщения");
-        return;
+        // return;
     }
 
     console.log(`Получено сообщение от ${from}: ${messageText}`);
