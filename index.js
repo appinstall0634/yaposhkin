@@ -2058,7 +2058,7 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
 
 // Отправка заказа в API
 async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count) {
-    const lan = await getUserLan(to);
+    const lan = await getUserLan(from);
     try {
         console.log("📝 Отправляем заказ в API");
         
