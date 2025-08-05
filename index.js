@@ -972,7 +972,7 @@ async function sendMenuResponse(phone_no_id, from, language) {
         const menuPdfPath = './assets/menu.pdf'; // Путь к вашему локальному PDF файлу
         
         // Проверяем существование файла
-        if (!fs.existsSync(menuPdfPath)) {
+        if (!fs.existsSync(menuPdfPath)) { 
             throw new Error('PDF файл меню не найден');
         }
         
