@@ -1860,7 +1860,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                     locationTitle = branchInfo.title;
                 } else {
                     console.log("❌ Информация о выбранном филиале не найдена");
-                    await sendMessage(phone_no_id, from, "❌ Ошибка: выбранный филиал недоступен. Попробуйте заново или обратитесь к менеджеру.");
+                    await sendMessage(phone_no_id, from, `❌ Ошибка: выбранный филиал недоступен. Попробуйте заново или обратитесь к менеджеру ${contact_branch['1']}.`);
                     await deleteUserState(from);
                     await clearUserWaitingState(from);
                     return;
@@ -1877,7 +1877,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
                         locationTitle = selectedBranch.title;
                     } else {
                         console.log("❌ Нет доступных филиалов");
-                        await sendMessage(phone_no_id, from, "❌ Извините, в данный момент нет доступных филиалов для самовывоза. Обратитесь к менеджеру.");
+                        await sendMessage(phone_no_id, from, `❌ Извините, в данный момент нет доступных филиалов для самовывоза. Обратитесь к менеджеру ${contact_branch['1']}.`);
                         await deleteUserState(from);
                         await clearUserWaitingState(from);
                         return;
@@ -1963,7 +1963,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         
     } catch (error) {
         console.error("❌ Ошибка расчета доставки и оформления заказа:", error);
-        await sendMessage(phone_no_id, from, "❌ Произошла критическая ошибка при оформлении заказа. Наш менеджер свяжется с вами.");
+        await sendMessage(phone_no_id, from, `❌ Произошла критическая ошибка при оформлении заказа. Свяжитесь с нашим менеджером ${contact_branch['1']}.`);
         await deleteUserState(from);
         await deleteUserOrders(from);
         await clearUserWaitingState(from);
