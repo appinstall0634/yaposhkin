@@ -542,11 +542,11 @@ async function startServer() {
         // Инициализируем MongoDB
         await initMongoDB();
 
-        // Тестируем GPT-4o
-        const gptWorking = await testGPT4oConnection();
-        if (!gptWorking) {
-            console.log("⚠️ GPT-4o недоступен, будет использоваться fallback анализ");
-        }
+        // // Тестируем GPT-4o
+        // const gptWorking = await testGPT4oConnection();
+        // if (!gptWorking) {
+        //     console.log("⚠️ GPT-4o недоступен, будет использоваться fallback анализ");
+        // }
 
         await getAllProductsForSections();
         
