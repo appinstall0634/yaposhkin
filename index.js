@@ -1064,7 +1064,7 @@ async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage
         
         // Загружаем файл и получаем media_id
         const uploadResponse = await axios.post(
-            `https://graph.facebook.com/v22.0/${phone_no_id}/media`,
+            `https://graph.facebook.com/v23.0/${phone_no_id}/media`,
             formData,
             {
                 headers: {
@@ -2540,7 +2540,7 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     try {
         const response = await axios({
             method: "POST",
-            url: `https://graph.facebook.com/v22.0/${phone_no_id}/messages?access_token=${token}`,
+            url: `https://graph.facebook.com/v23.0/${phone_no_id}/messages?access_token=${token}`,
             data: messageData,
             headers: {
                 "Content-Type": "application/json"
