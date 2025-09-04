@@ -30,7 +30,7 @@ const ORDER_FLOW_ID_KY = '769449935850843'; // order
 // MongoDB конфигурация
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'whatsapp_bot';
-let db = null;
+let db = null; 
 let userStatesCollection = null;
 let userDataForOrderCollection = null;
 
