@@ -1,0 +1,759 @@
+//id is 1039325028388021
+{
+  "routing_model": {
+    "ORDER_TYPE": [
+      "DELIVERY_OPTIONS"
+    ],
+    "DELIVERY_OPTIONS": [
+      "PROMO_AND_TIME"
+    ],
+    "PROMO_AND_TIME": [
+      "PAYMENT_METHOD"
+    ],
+    "PAYMENT_METHOD": []
+  },
+  "data_api_version": "3.0",
+  "version": "7.2",
+  "screens": [
+    {
+      "id": "ORDER_TYPE",
+      "title": "Заказ түрү",
+      "data": {
+        "flow_type": {
+          "type": "string",
+          "__example__": "existing_customer"
+        },
+        "customer_name": {
+          "type": "string",
+          "__example__": "Бекмурат"
+        },
+        "user_addresses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "address_0",
+              "title": "Пушкин көч., 10-үй, 5-кв."
+            },
+            {
+              "id": "address_1",
+              "title": "Ленин көч., 15-үй, 3-кв."
+            },
+            {
+              "id": "new",
+              "title": "➕ Жаңы дарек"
+            }
+          ]
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "🏪 Исы Ахунбаева 125в"
+            },
+            {
+              "id": "2",
+              "title": "🏪 Кок жар (Чар 83)"
+            }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "🍣 Кош келиңиз!"
+              },
+              {
+                "type": "TextSubheading",
+                "text": "${data.customer_name}"
+              },
+              {
+                "type": "TextSubheading",
+                "text": "Заказды кантип алып кетесиз?"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Заказ түрү",
+                "name": "order_type",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "pickup",
+                    "title": "🥡 Өзү менен (өзү алып кетүү)"
+                  },
+                  {
+                    "id": "delivery",
+                    "title": "🚗 Жеткирүү"
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Улантуу",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {
+                    "type": "screen",
+                    "name": "DELIVERY_OPTIONS"
+                  },
+                  "payload": {
+                    "flow_type": "${data.flow_type}",
+                    "customer_name": "${data.customer_name}",
+                    "order_type": "${form.order_type}",
+                    "user_addresses": "${data.user_addresses}",
+                    "branches": "${data.branches}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DELIVERY_OPTIONS",
+      "title": "Алуу жери",
+      "data": {
+        "flow_type": {
+          "type": "string",
+          "__example__": "existing_customer"
+        },
+        "customer_name": {
+          "type": "string",
+          "__example__": "Бекмурат"
+        },
+        "order_type": {
+          "type": "string",
+          "__example__": "delivery"
+        },
+        "user_addresses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "address_0",
+              "title": "Пушкин көч., 10-үй, 5-кв."
+            },
+            {
+              "id": "address_1",
+              "title": "Ленин көч., 15-үй, 3-кв."
+            },
+            {
+              "id": "new",
+              "title": "➕ Жаңы дарек"
+            }
+          ]
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "🏪 Исы Ахунбаева 125в"
+            },
+            {
+              "id": "2",
+              "title": "🏪 Кок жар (Чар 83)"
+            }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "📍 Алуу жери"
+              },
+              {
+                "type": "If",
+                "condition": "${data.order_type} == 'pickup'",
+                "then": [
+                  {
+                    "type": "TextSubheading",
+                    "text": "Өзү алып кетүү үчүн филиалды тандаңыз:"
+                  },
+                  {
+                    "type": "RadioButtonsGroup",
+                    "label": "Филиал",
+                    "name": "branch",
+                    "required": true,
+                    "data-source": "${data.branches}"
+                  }
+                ],
+                "else": [
+                  {
+                    "type": "TextSubheading",
+                    "text": "Жеткирүү дареги:"
+                  },
+                  {
+                    "type": "RadioButtonsGroup",
+                    "label": "Жеткирүү дареги",
+                    "name": "delivery_choice",
+                    "required": true,
+                    "data-source": "${data.user_addresses}"
+                  },
+                  {
+                    "type": "If",
+                    "condition": "${form.delivery_choice} == 'new'",
+                    "then": [
+                      {
+                        "type": "TextInput",
+                        "name": "new_address",
+                        "label": "Жаңы дарек",
+                        "input-type": "text",
+                        "required": true,
+                        "helper-text": "Жеткирүүнүн толук дарегин көрсөтүңүз"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Кийинки",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {
+                    "type": "screen",
+                    "name": "PROMO_AND_TIME"
+                  },
+                  "payload": {
+                    "flow_type": "${data.flow_type}",
+                    "customer_name": "${data.customer_name}",
+                    "order_type": "${data.order_type}",
+                    "user_addresses": "${data.user_addresses}",
+                    "branches": "${data.branches}",
+                    "branch": "${form.branch}",
+                    "delivery_choice": "${form.delivery_choice}",
+                    "new_address": "${form.new_address}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PROMO_AND_TIME",
+      "title": "Заказ чоо-жайы",
+      "data": {
+        "flow_type": {
+          "type": "string",
+          "__example__": "existing_customer"
+        },
+        "customer_name": {
+          "type": "string",
+          "__example__": "Бекмурат"
+        },
+        "order_type": {
+          "type": "string",
+          "__example__": "delivery"
+        },
+        "user_addresses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "address_0",
+              "title": "Пушкин көч., 10-үй, 5-кв."
+            }
+          ]
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "🏪 Исы Ахунбаева 125в"
+            }
+          ]
+        },
+        "branch": {
+          "type": "string",
+          "__example__": "1"
+        },
+        "delivery_choice": {
+          "type": "string",
+          "__example__": "address_0"
+        },
+        "new_address": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "⏰ Убакыт жана промокод"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Даярдоо убактысы",
+                "name": "preparation_time",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "asap",
+                    "title": "⚡ Мүмкүн болушунча тезирээк"
+                  },
+                  {
+                    "id": "specific",
+                    "title": "🕐 Белгилүү убакыт"
+                  }
+                ]
+              },
+              {
+                "type": "If",
+                "condition": "${form.preparation_time} == 'specific'",
+                "then": [
+                  {
+                    "type": "Dropdown",
+                    "name": "specific_time",
+                    "label": "Убакыт",
+                    "required": true,
+                    "data-source": [
+                      {
+                        "id": "12:00",
+                        "title": "12:00"
+                      },
+                      {
+                        "id": "12:30",
+                        "title": "12:30"
+                      },
+                      {
+                        "id": "13:00",
+                        "title": "13:00"
+                      },
+                      {
+                        "id": "13:30",
+                        "title": "13:30"
+                      },
+                      {
+                        "id": "14:00",
+                        "title": "14:00"
+                      },
+                      {
+                        "id": "14:30",
+                        "title": "14:30"
+                      },
+                      {
+                        "id": "15:00",
+                        "title": "15:00"
+                      },
+                      {
+                        "id": "15:30",
+                        "title": "15:30"
+                      },
+                      {
+                        "id": "16:00",
+                        "title": "16:00"
+                      },
+                      {
+                        "id": "16:30",
+                        "title": "16:30"
+                      },
+                      {
+                        "id": "17:00",
+                        "title": "17:00"
+                      },
+                      {
+                        "id": "17:30",
+                        "title": "17:30"
+                      },
+                      {
+                        "id": "18:00",
+                        "title": "18:00"
+                      },
+                      {
+                        "id": "18:30",
+                        "title": "18:30"
+                      },
+                      {
+                        "id": "19:00",
+                        "title": "19:00"
+                      },
+                      {
+                        "id": "19:30",
+                        "title": "19:30"
+                      },
+                      {
+                        "id": "20:00",
+                        "title": "20:00"
+                      },
+                      {
+                        "id": "20:30",
+                        "title": "20:30"
+                      },
+                      {
+                        "id": "21:00",
+                        "title": "21:00"
+                      },
+                      {
+                        "id": "21:30",
+                        "title": "21:30"
+                      },
+                      {
+                        "id": "22:00",
+                        "title": "22:00"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "utensils_count",
+                "label": "🍴 Аш-табак жабдыктары",
+                "required": false,
+                "data-source": [
+                  {
+                    "id": "0",
+                    "title": "Керек эмес"
+                  },
+                  {
+                    "id": "1",
+                    "title": "1"
+                  },
+                  {
+                    "id": "2",
+                    "title": "2"
+                  },
+                  {
+                    "id": "3",
+                    "title": "3"
+                  },
+                  {
+                    "id": "4",
+                    "title": "4"
+                  },
+                  {
+                    "id": "5",
+                    "title": "5"
+                  },
+                  {
+                    "id": "custom",
+                    "title": "Башка санды көрсөтүү"
+                  }
+                ]
+              },
+              {
+                "type": "If",
+                "condition": "${form.utensils_count} == 'custom'",
+                "then": [
+                  {
+                    "type": "TextInput",
+                    "name": "custom_utensils_count",
+                    "label": "Жабдыктардын саны",
+                    "input-type": "number",
+                    "required": true,
+                    "helper-text": "Керектүү аш-табак жабдыктарынын санын киргизиңиз"
+                  }
+                ]
+              },
+              {
+                "type": "TextInput",
+                "name": "promo_code",
+                "label": "Промокод",
+                "input-type": "text",
+                "required": false,
+                "helper-text": "Арзандатуу үчүн промокод киргизиңиз"
+              },
+              {
+                "type": "TextInput",
+                "name": "comment",
+                "label": "Комментарий",
+                "input-type": "text",
+                "required": false,
+                "helper-text": "Заказга кошумча каалоолор"
+              },
+              {
+                "type": "Footer",
+                "label": "Кийинки",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": {
+                    "type": "screen",
+                    "name": "PAYMENT_METHOD"
+                  },
+                  "payload": {
+                    "flow_type": "${data.flow_type}",
+                    "customer_name": "${data.customer_name}",
+                    "order_type": "${data.order_type}",
+                    "user_addresses": "${data.user_addresses}",
+                    "branches": "${data.branches}",
+                    "branch": "${data.branch}",
+                    "delivery_choice": "${data.delivery_choice}",
+                    "new_address": "${data.new_address}",
+                    "preparation_time": "${form.preparation_time}",
+                    "specific_time": "${form.specific_time}",
+                    "promo_code": "${form.promo_code}",
+                    "comment": "${form.comment}",
+                    "utensils_count": "${form.utensils_count}",
+                    "custom_utensils_count": "${form.custom_utensils_count}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PAYMENT_METHOD",
+      "title": "Төлөө жолу",
+      "data": {
+        "flow_type": {
+          "type": "string",
+          "__example__": "existing_customer"
+        },
+        "customer_name": {
+          "type": "string",
+          "__example__": "Бекмурат"
+        },
+        "order_type": {
+          "type": "string",
+          "__example__": "delivery"
+        },
+        "user_addresses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "address_0",
+              "title": "Пушкин көч., 10-үй, 5-кв."
+            }
+          ]
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "__example__": [
+            {
+              "id": "1",
+              "title": "🏪 Исы Ахунбаева 125в"
+            }
+          ]
+        },
+        "branch": {
+          "type": "string",
+          "__example__": "1"
+        },
+        "delivery_choice": {
+          "type": "string",
+          "__example__": "address_0"
+        },
+        "new_address": {
+          "type": "string",
+          "__example__": ""
+        },
+        "preparation_time": {
+          "type": "string",
+          "__example__": "asap"
+        },
+        "specific_time": {
+          "type": "string",
+          "__example__": "18:00"
+        },
+        "promo_code": {
+          "type": "string",
+          "__example__": "PROMO10"
+        },
+        "comment": {
+          "type": "string",
+          "__example__": "Ачуусуз"
+        },
+        "utensils_count": {
+          "type": "string",
+          "__example__": "2"
+        },
+        "custom_utensils_count": {
+          "type": "string",
+          "__example__": "8"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "💳 Төлөө жолу"
+              },
+              {
+                "type": "TextSubheading",
+                "text": "Сизге ыңгайлуу төлөө жолун тандаңыз:"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "label": "Төлөө",
+                "name": "payment_method",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "cash",
+                    "title": "💵 Акча менен"
+                  },
+                  {
+                    "id": "transfer",
+                    "title": "📱 Которуу менен"
+                  }
+                ]
+              },
+              {
+                "type": "If",
+                "condition": "${form.payment_method} == 'transfer'",
+                "then": [
+                  {
+                    "type": "TextBody",
+                    "text": "📱 Сметаны эсептеп чыккандан кийин сизге QR код жөнөтүлөт."
+                  }
+                ]
+              },
+              {
+                "type": "If",
+                "condition": "${form.payment_method} == 'cash'",
+                "then": [
+                  {
+                    "type": "TextBody",
+                    "text": "💵 Заказды алганда накыт акча менен төлөө."
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Даярдоону бүтүрүү",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "flow_type": "${data.flow_type}",
+                    "customer_name": "${data.customer_name}",
+                    "order_type": "${data.order_type}",
+                    "user_addresses": "${data.user_addresses}",
+                    "branches": "${data.branches}",
+                    "branch": "${data.branch}",
+                    "delivery_choice": "${data.delivery_choice}",
+                    "new_address": "${data.new_address}",
+                    "preparation_time": "${data.preparation_time}",
+                    "specific_time": "${data.specific_time}",
+                    "promo_code": "${data.promo_code}",
+                    "comment": "${data.comment}",
+                    "utensils_count": "${data.utensils_count}",
+                    "custom_utensils_count": "${data.custom_utensils_count}",
+                    "payment_method": "${form.payment_method}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "terminal": true,
+      "success": true
+    }
+  ]
+}

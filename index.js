@@ -21,10 +21,10 @@ const mytoken = process.env.MYTOKEN;
 const TEMIR_API_BASE = 'https://ya.temir.me';
 
 // Flow IDs
-const NEW_CUSTOMER_FLOW_ID = '4265839023734503'; // newCustomer
-const ORDER_FLOW_ID = '708820881926236'; // order
-const NEW_CUSTOMER_FLOW_ID_KY = '1648351135826188'; // newCustomer
-const ORDER_FLOW_ID_KY = '1039325028388021'; // order
+const NEW_CUSTOMER_FLOW_ID = '822959930422520'; // newCustomer
+const ORDER_FLOW_ID = '1265635731924331'; // order
+const NEW_CUSTOMER_FLOW_ID_KY = '762432499878824'; // newCustomer
+const ORDER_FLOW_ID_KY = '769449935850843'; // order
 
 
 // MongoDB конфигурация
