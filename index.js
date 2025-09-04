@@ -24,7 +24,7 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '822959930422520'; // newCustomer
 const ORDER_FLOW_ID = '1265635731924331'; // order
 const NEW_CUSTOMER_FLOW_ID_KY = '762432499878824'; // newCustomer
-const ORDER_FLOW_ID_KY = '769449935850843'; // order
+const ORDER_FLOW_ID_KY = '769449935850843'; // order 
 
 
 // MongoDB конфигурация
