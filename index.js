@@ -24,13 +24,13 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '822959930422520'; // newCustomer
 const ORDER_FLOW_ID = '1265635731924331'; // order
 const NEW_CUSTOMER_FLOW_ID_KY = '762432499878824'; // newCustomer
-const ORDER_FLOW_ID_KY = '769449935850843'; // order 
+const ORDER_FLOW_ID_KY = '769449935850843'; // order
 
 
 // MongoDB конфигурация
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'whatsapp_bot';
-let db = null; 
+let db = null;
 let userStatesCollection = null;
 let userDataForOrderCollection = null;
 
@@ -1064,7 +1064,7 @@ async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage
         
         // Загружаем файл и получаем media_id
         const uploadResponse = await axios.post(
-            `https://graph.facebook.com/v23.0/${phone_no_id}/media`,
+            `https://graph.facebook.com/v22.0/${phone_no_id}/media`,
             formData,
             {
                 headers: {
@@ -2483,12 +2483,16 @@ async function getProductInfo(productId) {
 
 async function getProductInfoForSections(productId) {
     try {
+        console.log('temp1');
         const products = await getAllProductsForSections();
+        console.log('temp2');
         
         if (products[productId]) {
             console.log(`✅ Товар найден в кэше: ${products[productId].title}`);
+            console.log('temp3');
             return products[productId];
         } else {
+            console.log('temp4');
             console.log(`❓ Товар ${productId} не найден в кэше, запрашиваем отдельно`);
             
             // Fallback - запрашиваем конкретный товар
@@ -2501,6 +2505,7 @@ async function getProductInfoForSections(productId) {
         }
         
     } catch (error) {
+        console.log('temp5');
         console.error(`❌ Ошибка получения товара ${productId}:`, error.response?.status);
         
         return {
@@ -2559,9 +2564,12 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
 
 async function fetchAndConvertMenuData() {
     try {
+
+        console.log('helloIn1');
         // Получаем данные из API
         const response = await axios.get('https://ya.temir.me/qr/catalog');
         const apiData = response.data;
+        console.log('helloIn2');
         
         
         // const optimizedMenuGroups = apiData.map(group => {
@@ -2575,14 +2583,19 @@ async function fetchAndConvertMenuData() {
 
         const optimizedMenuGroups = await Promise.all(
   apiData.map(async (group) => {
+    console.log('helloIn3');
     return await Promise.all(
       group.map(async (section) => {
+        console.log('helloIn4');
         const productIds = await Promise.all(
           section.products.map(async (api_id) => {
+            console.log('helloIn5');
             const product = await getProductInfoForSections(api_id);
+            console.log('helloIn6');
             return product.id; // только id
           })
         );
+        console.log('helloIn7');
 
         return {
             section_title: section.section_title,
@@ -2592,9 +2605,10 @@ async function fetchAndConvertMenuData() {
     );
   })
 );
-        
+        console.log('helloIn8');
         return optimizedMenuGroups;
     } catch (error) {
+        console.log('helloIn9');
         console.error('Ошибка при получении данных:', error.message);
         return null;
     }
@@ -2700,6 +2714,7 @@ async function sendCatalog(phone_no_id, to) {
     try {
         // Получаем CATALOG_ID из переменных окружения
         const catalogId = process.env.CATALOG_ID;
+        console.log('hello1');
         if (!catalogId) {
             console.error("❌ CATALOG_ID не найден в переменных окружения");
             throw new Error("CATALOG_ID не настроен");
@@ -2708,6 +2723,7 @@ async function sendCatalog(phone_no_id, to) {
         
         // Используем оптимизированные группы
         const categoryGroups = await fetchAndConvertMenuData();
+        console.log('hello2');
         
         console.log(`📊 Оптимизированная группировка:`);
         console.log(`   Исходно: 12 категорий`);
@@ -2770,6 +2786,8 @@ async function sendCatalog(phone_no_id, to) {
 
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId, lan) {
     try {
+        
+        console.log('Privet')
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
             title: category.section_title,
@@ -2777,10 +2795,13 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 product_retailer_id: id
             }))
         }));
+
+        console.log('Privet2')
         
         // Подсчитываем общее количество товаров
         const totalProducts = categories.reduce((sum, cat) => sum + cat.products.length, 0);
         
+        console.log('Privet3')
         // Формируем умный заголовок
         let headerText;
         if (categories.length === 1) {
@@ -2805,6 +2826,8 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         if (headerText.length > 60) {
             headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
+
+        console.log('Privet4')
 
         var productListData = {
             messaging_product: "whatsapp",
@@ -2867,6 +2890,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         await sendWhatsAppMessage(phone_no_id, productListData);
         
     } catch (error) {
+        console.log('Privet2')
         console.error("❌ Ошибка отправки product_list с секциями:", error);
         
         // Если не получилось отправить product_list, отправляем обычное сообщение
