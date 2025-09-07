@@ -24,13 +24,13 @@ const TEMIR_API_BASE = 'https://ya.temir.me';
 const NEW_CUSTOMER_FLOW_ID = '822959930422520'; // newCustomer
 const ORDER_FLOW_ID = '1265635731924331'; // order
 const NEW_CUSTOMER_FLOW_ID_KY = '762432499878824'; // newCustomer
-const ORDER_FLOW_ID_KY = '769449935850843'; // order 
+const ORDER_FLOW_ID_KY = '769449935850843'; // order
 
 
 // MongoDB конфигурация
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'whatsapp_bot';
-let db = null; 
+let db = null;
 let userStatesCollection = null;
 let userDataForOrderCollection = null;
 
@@ -1064,7 +1064,7 @@ async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage
         
         // Загружаем файл и получаем media_id
         const uploadResponse = await axios.post(
-            `https://graph.facebook.com/v23.0/${phone_no_id}/media`,
+            `https://graph.facebook.com/v22.0/${phone_no_id}/media`,
             formData,
             {
                 headers: {
@@ -2540,7 +2540,7 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     try {
         const response = await axios({
             method: "POST",
-            url: `https://graph.facebook.com/v23.0/${phone_no_id}/messages?access_token=${token}`,
+            url: `https://graph.facebook.com/v22.0/${phone_no_id}/messages?access_token=${token}`,
             data: messageData,
             headers: {
                 "Content-Type": "application/json"
