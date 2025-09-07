@@ -2581,6 +2581,7 @@ async function fetchAndConvertMenuData() {
         //     })});
         // });
 
+        const products = await getAllProductsForSections();
         const optimizedMenuGroups = await Promise.all(
   apiData.map(async (group) => {
     console.log('helloIn3');
@@ -2590,9 +2591,8 @@ async function fetchAndConvertMenuData() {
         const productIds = await Promise.all(
           section.products.map(async (api_id) => {
             console.log('helloIn5');
-            const product = await getProductInfoForSections(api_id);
-            console.log('helloIn6');
-            return product.id; // только id
+            // const product = await getProductInfoForSections(api_id);
+            return products[api_id].id; // только id
           })
         );
         console.log('helloIn7');
