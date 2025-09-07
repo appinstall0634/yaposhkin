@@ -1691,7 +1691,7 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
                 const productInfo = await getProductInfo(item.product_retailer_id);
                 
                 const productName = productInfo.title || `Товар ${item.product_retailer_id}`;
-                const productId = productInfo.api_id;
+                const productId = productInfo.id;
                 const itemPrice = parseFloat(item.item_price) || 0;
                 const itemTotal = itemPrice * item.quantity;
                 
