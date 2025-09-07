@@ -2540,7 +2540,7 @@ async function sendWhatsAppMessage(phone_no_id, messageData) {
     try {
         const response = await axios({
             method: "POST",
-            url: `https://graph.facebook.com/v22.0/${phone_no_id}/messages?access_token=${token}`,
+            url: `https://graph.facebook.com/v23.0/${phone_no_id}/messages?access_token=${token}`,
             data: messageData,
             headers: {
                 "Content-Type": "application/json"
@@ -2770,6 +2770,8 @@ async function sendCatalog(phone_no_id, to) {
 
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId, lan) {
     try {
+        
+        console.log('Privet')
         // Формируем секции для WhatsApp
         const sections = categories.map(category => ({
             title: category.section_title,
@@ -2777,10 +2779,13 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
                 product_retailer_id: id
             }))
         }));
+
+        console.log('Privet2')
         
         // Подсчитываем общее количество товаров
         const totalProducts = categories.reduce((sum, cat) => sum + cat.products.length, 0);
         
+        console.log('Privet3')
         // Формируем умный заголовок
         let headerText;
         if (categories.length === 1) {
@@ -2805,6 +2810,8 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         if (headerText.length > 60) {
             headerText = `${categories.length} категорий (${totalProducts} товаров)`;
         }
+
+        console.log('Privet4')
 
         var productListData = {
             messaging_product: "whatsapp",
@@ -2867,6 +2874,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
         await sendWhatsAppMessage(phone_no_id, productListData);
         
     } catch (error) {
+        console.log('Privet5')
         console.error("❌ Ошибка отправки product_list с секциями:", error);
         
         // Если не получилось отправить product_list, отправляем обычное сообщение
