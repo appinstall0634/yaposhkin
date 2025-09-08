@@ -903,7 +903,13 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
   if (categories.length === 1) headerText = `🍣 ${categories[0].section_title}`;
   else if (categories.length === 2) headerText = `🍣 ${categories[0].section_title} и ${categories[1].section_title}`;
   else if (categories.length === 3) headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} и ${categories[2].section_title}`;
-  else headerText = `${categories.length} категорий`;
+  else if (categories.length === 4) {
+
+            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title}, ${categories[2].section_title} и ${categories[3].section_title}`;
+        } else {
+            const remaining = categories.length - 2;
+            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} +${remaining} категорий`;
+        }
 
   const productListData = {
     messaging_product: "whatsapp",
