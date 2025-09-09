@@ -460,7 +460,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
     type: "interactive",
     interactive: {
       type: "button",
-      header: { type: "text", text: "Кош келиниз!" },
+      header: { type: "text", text: "Кош келиниз!\n\nДобро пожаловать!" },
       body: { text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания." },
       footer: { text: "Yaposhkin Rolls" },
       action: {
