@@ -35,6 +35,8 @@ let db = null;
 let userStatesCollection = null;
 let userDataForOrderCollection = null;
 
+let heavyMedia = false;
+
 // ---------------------------- States ----------------------------
 const WAITING_STATES = {
   NONE: 'none',
@@ -367,6 +369,7 @@ async function handleMidOrderHelp(phone_no_id, from, message, currentWaitingStat
     await sendPickupAddressResponse(phone_no_id, from, analysis.language);
   } else if (analysis.intent === 'MENU_QUESTION') {
     await sendMenuResponse(phone_no_id, from, analysis.language);
+    heavyMedia = true;
   } else if (analysis.intent === 'ORDER_FOR_ANOTHER') {
     await sendOrderForAnotherResponse(phone_no_id, from, analysis.language);
   } else if (analysis.intent === 'PAYMENT_METHOD') {
@@ -397,6 +400,8 @@ async function handleMidOrderHelp(phone_no_id, from, message, currentWaitingStat
 
   // Переводим в состояние подтверждения
   await setUserWaitingState(from, WAITING_STATES.HELP_CONFIRM);
+
+  if (heavyMedia) await sleep(1500);
 
   // Кнопки «Продолжить/Отменить»
   await sendHelpContinueButtons(phone_no_id, from);
