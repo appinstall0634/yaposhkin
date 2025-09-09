@@ -51,9 +51,38 @@ const contact_branch = {
   '15': '0705063676'
 };
 
+
+const IMPORTANT_RU = [/статус|готов|когда|сколько|где|адрес|самовывоз|оплат|карт[аой]|меню|каталог|пицц|бургер|картошк|отслед|уведомлен/i];
+const IMPORTANT_KG = [/статус|качан|канча|кайда|дарек|алып кетүү|төлөө|карта|меню|каталог|сеттер|көзөмөлдө/i];
+
+function detectLanguage(t="") {
+  const kgWords = /(буйрутма|салам|кандайсыз|качан|канча|алып кетүү|төлөө|сеттер)/i;
+  return kgWords.test(t) ? 'kg' : 'ru';
+}
+function looksLikeQuestion(t="") {
+  return /[?؟]\s*$/.test(t) ||
+         /^(как|когда|где|что|сколько|зачем|можно|кантип|качан|кайда|эмне|канча|болобу)\b/i.test(t.trim());
+}
+function hasImportantWords(t="") {
+  return IMPORTANT_RU.some(r => r.test(t)) || IMPORTANT_KG.some(r => r.test(t));
+}
+function shouldAssumeOrder(t="") {
+  const s = t.trim();
+  if (!s) return false;
+  if (s.length <= 18 && /\b(прив|сал|ок|да|ага|алло|здра|салам)\b/i.test(s)) return true;
+  if (/^[\p{Emoji_Presentation}\p{Emoji}\u2764\uFE0F\s]+$/u.test(s)) return true;
+  return !looksLikeQuestion(s) && !hasImportantWords(s);
+}
+
 // ---------------------------- AI Intent ----------------------------
 async function analyzeCustomerIntent(messageText) {
   try {
+
+    const lang = detectLanguage(messageText || "");
+    if (shouldAssumeOrder(messageText || "")) {
+      return { intent: 'ORDER_INTENT', isOrderIntent: true, language: lang, originalText: messageText };
+    }
+
     const { text } = await generateText({
       model: openai('gpt-4o'),
       messages: [
