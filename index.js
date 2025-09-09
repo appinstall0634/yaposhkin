@@ -415,7 +415,7 @@ async function sendHelpContinueButtons(phone_no_id, to) {
       footer: { text: "Yaposhkin Rolls" },
       action: {
         buttons: [
-          { type: "reply", reply: { id: "continue_order", title: lan === 'kg' ? "Улантуу" : "Продолжить" } },
+          { type: "reply", reply: { id: "continue_order", title: lan === 'kg' ? "Буйрутманы улантуу" : "Продолжить заказ" } },
           { type: "reply", reply: { id: "cancel_order", title: lan === 'kg' ? "Жокко чыгаруу" : "Отменить" } }
         ]
       }
