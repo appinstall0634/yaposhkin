@@ -336,7 +336,7 @@ app.post("/webhook", async (req, res) => {
       }
       // 6) Вопрос в середине процесса: текст во время FLOW_RESPONSE или CATALOG_ORDER
       else if (message.type === "text" &&
-              (currentWaitingState === WAITING_STATES.FLOW_RESPONSE || currentWaitingState === WAITING_STATES.CATALOG_ORDER)) {
+              (currentWaitingState === WAITING_STATES.FLOW_RESPONSE || currentWaitingState === WAITING_STATES.CATALOG_ORDER || currentWaitingState === WAITING_STATES.HELP_CONFIRM)) {
         await handleMidOrderHelp(phone_no_id, from, message, currentWaitingState, body_param);
       }
       // 7) Обычное текстовое сообщение, когда процессов нет

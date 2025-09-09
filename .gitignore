@@ -1,12 +1,27 @@
-node_modules
-.env
-flows
-key
+flows/
+key/
 converter.html
-private_key.pem
-public_key.pem
-temp.html
-temp.js
-temp2.html
-temp3.html
-testm2.js
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.*
+
+# Ключи и приватные файлы
+key/
+*.pem
+
+# Временные/черновики
+temp*.html
+temp*.js
+
+# ОС/IDE
+.DS_Store
+.vscode/
+
+# Vercel
+.vercel/
