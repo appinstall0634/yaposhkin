@@ -51,69 +51,92 @@ const contact_branch = {
   '15': '0705063676'
 };
 
-
-const IMPORTANT_RU = [/статус|готов|когда|сколько|где|адрес|самовывоз|оплат|карт[аой]|меню|каталог|пицц|бургер|картошк|отслед|уведомлен/i];
-const IMPORTANT_KG = [/статус|качан|канча|кайда|дарек|алып кетүү|төлөө|карта|меню|каталог|сеттер|көзөмөлдө/i];
-
-function detectLanguage(t="") {
-  const kgWords = /(буйрутма|салам|кандайсыз|качан|канча|алып кетүү|төлөө|сеттер)/i;
-  return kgWords.test(t) ? 'kg' : 'ru';
-}
-function looksLikeQuestion(t="") {
-  return /[?؟]\s*$/.test(t) ||
-         /^(как|когда|где|что|сколько|зачем|можно|кантип|качан|кайда|эмне|канча|болобу)\b/i.test(t.trim());
-}
-function hasImportantWords(t="") {
-  return IMPORTANT_RU.some(r => r.test(t)) || IMPORTANT_KG.some(r => r.test(t));
-}
-function shouldAssumeOrder(t="") {
-  const s = t.trim();
-  if (!s) return false;
-  if (s.length <= 18 && /\b(прив|сал|ок|да|ага|алло|здра|салам)\b/i.test(s)) return true;
-  if (/^[\p{Emoji_Presentation}\p{Emoji}\u2764\uFE0F\s]+$/u.test(s)) return true;
-  return !looksLikeQuestion(s) && !hasImportantWords(s);
-}
-
 // ---------------------------- AI Intent ----------------------------
+// async function analyzeCustomerIntent(messageText) {
+//   try {
+//     const { text } = await generateText({
+//       model: openai('gpt-4o'),
+//       messages: [
+//         {
+//           role: 'system',
+//           content: `Ты эксперт-аналитик намерений клиентов ресторана "Yaposhkin Rolls".
+// Верни строго одну строку в формате:
+// <INTENT>|<lang>
+// Где <INTENT> один из:
+// ORDER_INTENT, ORDER_STATUS, ORDER_TRACKING, PICKUP_ADDRESS, MENU_QUESTION, ORDER_FOR_ANOTHER, PAYMENT_METHOD, OTHER_INTENT
+// А <lang> один из: ru, kg.
+// `
+//         },
+//         { role: 'user', content: messageText }
+//       ],
+//       maxTokens: 20,
+//       temperature: 0.0
+//     });
+
+//     const parts = text.trim().split('|');
+//     if (parts.length >= 2) {
+//       const intent = parts[0].trim();
+//       const language = parts[1].trim();
+//       return { intent, isOrderIntent: intent === 'ORDER_INTENT', language, originalText: messageText };
+//     }
+//     // fallback
+//     return analyzeIntentFallback(messageText);
+//   } catch {
+//     return analyzeIntentFallback(messageText);
+//   }
+// }
+
 async function analyzeCustomerIntent(messageText) {
   try {
-
-    const lang = detectLanguage(messageText || "");
-    if (shouldAssumeOrder(messageText || "")) {
-      return { intent: 'ORDER_INTENT', isOrderIntent: true, language: lang, originalText: messageText };
-    }
-
     const { text } = await generateText({
       model: openai('gpt-4o'),
       messages: [
         {
           role: 'system',
-          content: `Ты эксперт-аналитик намерений клиентов ресторана "Yaposhkin Rolls".
-Верни строго одну строку в формате:
-<INTENT>|<lang>
-Где <INTENT> один из:
-ORDER_INTENT, ORDER_STATUS, ORDER_TRACKING, PICKUP_ADDRESS, MENU_QUESTION, ORDER_FOR_ANOTHER, PAYMENT_METHOD, OTHER_INTENT
-А <lang> один из: ru, kg.
-`
+          content: `Ты классификатор намерений для ресторана "Yaposhkin Rolls".
+Формат ответа: "<INTENT>|<lang>" и ничего больше.
+
+ЯЗЫК:
+- <lang> = "kg", если есть кыргызские слова (буйрутма, салам, кандайсыз, качан, канча, алып кетүү, төлөө, setter, көзөмөлдөө и т.п.), иначе "ru".
+
+ГЛАВНОЕ ПРАВИЛО:
+- Если сообщение НЕ является вопросом, то ВСЕГДА возвращай: ORDER_INTENT|<lang>.
+
+Сообщение считается ВОПРОСОМ если:
+1) оканчивается на "?" или "؟", ИЛИ
+2) начинается с вопросительного слова:
+   RU: как, когда, где, что, сколько, зачем, можно, какой, какие, куда, откуда
+   KG: кантип, качан, кайда, эмне, канча, болобу
+
+ЕСЛИ ЭТО ВОПРОС, тогда классифицируй:
+- ORDER_STATUS: статус заказа, готов/когда будет, где мой заказ, сколько ждать
+- ORDER_TRACKING: как отслеживать заказ, будет ли уведомление
+- PICKUP_ADDRESS: адрес самовывоза, где находитесь, адреса филиалов
+- MENU_QUESTION: вопросы о меню/составах/наличии категорий
+- ORDER_FOR_ANOTHER: можно ли заказать на другого человека
+- PAYMENT_METHOD: оплата картой/онлайн/терминал
+- OTHER_INTENT: всё прочее не из списка
+
+Возвращай строго одну строку "<INTENT>|<lang>".`
         },
-        { role: 'user', content: messageText }
+        { role: 'user', content: messageText || '' }
       ],
       maxTokens: 20,
       temperature: 0.0
     });
 
-    const parts = text.trim().split('|');
+    const parts = (text || '').trim().split('|');
     if (parts.length >= 2) {
       const intent = parts[0].trim();
       const language = parts[1].trim();
       return { intent, isOrderIntent: intent === 'ORDER_INTENT', language, originalText: messageText };
     }
-    // fallback
     return analyzeIntentFallback(messageText);
   } catch {
     return analyzeIntentFallback(messageText);
   }
 }
+
 
 // Единая fallback-функция
 function analyzeIntentFallback(messageText) {
@@ -460,7 +483,7 @@ async function sendOrderConfirmationButtons(phone_no_id, to) {
     type: "interactive",
     interactive: {
       type: "button",
-      header: { type: "text", text: "Кош келиниз!\n\nДобро пожаловать!" },
+      header: { type: "text", text: "Кош келиниз!\nДобро пожаловать!" },
       body: { text: "📋 Тилди танданыз.\n\n📋 Выберите язык обслуживания." },
       footer: { text: "Yaposhkin Rolls" },
       action: {
