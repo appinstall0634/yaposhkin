@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { MongoClient } = require('mongodb');
 const path = require('path');
+const { Console } = require('console');
 
 // ---------------------------- Config ----------------------------
 const PORT = process.env.PORT || 3500;
@@ -1251,6 +1252,12 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
     const preorderResponse = await axios.post(
       `${TEMIR_API_BASE}/qr/preorder/?qr_token=${customerData.qr_access_token}`, preorderData
     );
+
+    console.log(`ERROR ORDER IS: ${preorderResponse.status}`)
+
+    console.log(`ERROR ORDER IS 2 : ${preorderResponse.data}`)
+
+    console.log(`ERROR ORDER IS 2 : ${preorderResponse.data.error}`)
 
     if (preorderResponse.data?.error) {
       throw { response: { status: 200, data: preorderResponse.data } };
