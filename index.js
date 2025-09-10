@@ -1258,6 +1258,7 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
 
     await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle, locationId);
   } catch (error) {
+    console.log(`оформление заказа ошибка: ${error}`)
     let errorMessage = lan === 'ru' ? '❌ Ошибка оформления заказа.' : '❌ Заказ берүүдө ката.';
     await sendMessage(phone_no_id, from, errorMessage);
     await deleteUserState(from);
@@ -1430,7 +1431,8 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
       await clearUserWaitingState(from);
     }
     await sendMessage(phone_no_id, from, successMessage);
-  } catch {
+  } catch (error){
+    console.log(`ошибка формление ${error}`)
     await deleteUserState(from);
     await clearUserWaitingState(from);
   }
