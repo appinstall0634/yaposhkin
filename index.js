@@ -457,6 +457,7 @@ async function resumeFlow(phone_no_id, from) {
 
 // ---------------------------- WhatsApp helpers ----------------------------
 async function sendWhatsAppMessage(phone_no_id, messageData) {
+  console.log(`send message is ${messageData}`)
   const response = await axios({
     method: "POST",
     url: `https://graph.facebook.com/v23.0/${phone_no_id}/messages?access_token=${token}`,
