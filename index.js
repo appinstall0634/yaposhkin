@@ -1595,70 +1595,130 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
     console.log('sendOrderStatusNotification success')
     return { success: true, message_id: response.messages?.[0]?.id };
   } catch (error) {
-    console.log(`sendOrderStatusNotification error ${error}`)
+    console.log(`sendOrderStatusNotification error $error`)
     return { success: false, error: error.message };
   }
 }
 
+// async function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, from) {
+//   const lan = await getUserLan(from);
+//   const userState = await getUserState(from);
+
+//   let message = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
+
+//   switch (status.toLowerCase()) {
+//     case 'accepted':
+//     case 'подтвержден':
+//       message += lan === 'ru' ? `✅ Ваш заказ подтвержден и принят в работу!\n\n` : `✅ Буйрутмаңыз ырасталды жана иштетүүгө кабыл алынды!\n\n`;
+//       break;
+//     case 'production':
+//     case 'отправлен на кухню':
+//       message += lan === 'ru' ? `👨‍🍳 Наши повара готовят ваш заказ!\n\n` : `👨‍🍳 Биздин ашпозчулар буйрутмаңызды даярдап жатышат!\n\n`;
+//       break;
+//     case 'out_for_delivery':
+//     case 'в_доставке':
+//       message += `🚗 Курьер в пути!\n\n📍 Ваш заказ доставляется по указанному адресу.\n`;
+//       break;
+//     case 'delivered':
+//     case 'доставлен':
+//       message += `✅ Заказ успешно доставлен!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+//       break;
+//     case 'completed':
+//     case 'выполнен':
+//       if (lan === 'ru') {
+//         if (userState?.order_type === 'delivery') {
+//           message += `🎉 Ваш заказ готов и передан курьеру!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+//         } else {
+//           message += `🎉 Ваш заказ готов к выдаче!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
+//         }
+//       } else {
+//         if (userState?.order_type === 'delivery') {
+//           message += `🎉 Буйрутмаңыз даяр жана курьерге берилди!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
+//         } else {
+//           message += `🎉 Буйрутмаңыз алып кетүүгө даяр!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
+//         }
+//       }
+//       await deleteUserState(from);
+//       await clearUserWaitingState(from);
+//       break;
+//     case 'cancelled':
+//     case 'отменен':
+//       message += lan === 'ru'
+//         ? `❌ Заказ отменен\n\n😔 Приносим извинения за неудобства.\n`
+//         : `❌ Буйрутма жокко чыгарылды\n\n😔 Ыңгайсыздык үчүн кечирим сурайбыз.\n`;
+//       await deleteUserState(from);
+//       await clearUserWaitingState(from);
+//       break;
+//     case 'delayed':
+//     case 'задержан':
+//       message += `⏰ Небольшая задержка заказа\n\n`;
+//       if (estimatedTime) message += `🕐 Новое ожидаемое время: ${estimatedTime}\n`;
+//       if (additionalInfo) message += `📝 Причина: ${additionalInfo}\n`;
+//       break;
+//     default:
+//       message += `📋 Статус заказа обновлен: ${status}\n\n`;
+//   }
+//   return message;
+// }
+
 async function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, from) {
   const lan = await getUserLan(from);
   const userState = await getUserState(from);
+  // const S = normalizeStatus(status);
+  const ordType = userState?.order_type;
 
-  let message = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
+  let m = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
 
-  switch (status.toLowerCase()) {
-    case 'accepted':
-    case 'подтвержден':
-      message += lan === 'ru' ? `✅ Ваш заказ подтвержден и принят в работу!\n\n` : `✅ Буйрутмаңыз ырасталды жана иштетүүгө кабыл алынды!\n\n`;
+  switch (status) {
+    case 'NEW':
+      m += lan === 'ru' ? '📝 Заказ создан. Ожидает подтверждения.\n\n'
+                        : '📝 Буйрутма түзүлдү. Ырастоону күтүп жатат.\n\n';
       break;
-    case 'production':
-    case 'отправлен на кухню':
-      message += lan === 'ru' ? `👨‍🍳 Наши повара готовят ваш заказ!\n\n` : `👨‍🍳 Биздин ашпозчулар буйрутмаңызды даярдап жатышат!\n\n`;
+    case 'ACCEPTED':
+      m += lan === 'ru' ? '✅ Заказ принят в работу.\n\n'
+                        : '✅ Буйрутма иштетүүгө кабыл алынды.\n\n';
       break;
-    case 'out_for_delivery':
-    case 'в_доставке':
-      message += `🚗 Курьер в пути!\n\n📍 Ваш заказ доставляется по указанному адресу.\n`;
+    case 'PRODUCTION':
+      m += lan === 'ru' ? '👨‍🍳 Заказ готовится.\n\n'
+                        : '👨‍🍳 Буйрутма даярдалууда.\n\n';
       break;
-    case 'delivered':
-    case 'доставлен':
-      message += `✅ Заказ успешно доставлен!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-      break;
-    case 'completed':
-    case 'выполнен':
-      if (lan === 'ru') {
-        if (userState?.order_type === 'delivery') {
-          message += `🎉 Ваш заказ готов и передан курьеру!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-        } else {
-          message += `🎉 Ваш заказ готов к выдаче!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-        }
+    case 'COMPLETED':
+      if (ordType === 'delivery') {
+        m += lan === 'ru' ? '🎉 Заказ готов. Ожидайте доставку.\n\n'
+                          : '🎉 Буйрутма даяр. Жеткирүү күтүлүүдө.\n\n';
       } else {
-        if (userState?.order_type === 'delivery') {
-          message += `🎉 Буйрутмаңыз даяр жана курьерге берилди!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
-        } else {
-          message += `🎉 Буйрутмаңыз алып кетүүгө даяр!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
-        }
+        m += lan === 'ru' ? '🎉 Заказ готов к выдаче.\n\n'
+                          : '🎉 Буйрутма алып кетүүгө даяр.\n\n';
       }
+      break;
+    case 'OUT_FOR_DELIVERY':
+      m += lan === 'ru' ? '🚗 Курьер в пути.\n\n'
+                        : '🚗 Курьер жолдо.\n\n';
+      break;
+    case 'DELIVERED':
+    case 'DONE':
+      m += lan === 'ru' ? '✅ Заказ закрыт. Спасибо.\n'
+                        : '✅ Буйрутма жабылды. Рахмат.\n';
       await deleteUserState(from);
       await clearUserWaitingState(from);
       break;
-    case 'cancelled':
-    case 'отменен':
-      message += lan === 'ru'
-        ? `❌ Заказ отменен\n\n😔 Приносим извинения за неудобства.\n`
-        : `❌ Буйрутма жокко чыгарылды\n\n😔 Ыңгайсыздык үчүн кечирим сурайбыз.\n`;
+    case 'CANCELLED':
+      m += lan === 'ru' ? '❌ Заказ отменен.\n'
+                        : '❌ Буйрутма жокко чыгарылды.\n';
       await deleteUserState(from);
       await clearUserWaitingState(from);
       break;
-    case 'delayed':
-    case 'задержан':
-      message += `⏰ Небольшая задержка заказа\n\n`;
-      if (estimatedTime) message += `🕐 Новое ожидаемое время: ${estimatedTime}\n`;
-      if (additionalInfo) message += `📝 Причина: ${additionalInfo}\n`;
+    case 'DELAYED':
+      m += lan === 'ru' ? '⏰ Небольшая задержка.\n'
+                        : '⏰ Кичине кечигүү.\n';
+      if (estimatedTime) m += `🕐 ${estimatedTime}\n`;
+      if (additionalInfo) m += `📝 ${additionalInfo}\n`;
       break;
     default:
-      message += `📋 Статус заказа обновлен: ${status}\n\n`;
+      m += lan === 'ru' ? `📋 Статус: ${status}\n`
+                        : `📋 Статус: ${status}\n`;
   }
-  return message;
+  return m;
 }
 
 // ---------------------------- Stats / Cleanup / Root ----------------------------
