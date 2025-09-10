@@ -1566,6 +1566,7 @@ function getPrivateKey() {
 // ---------------------------- Order status notify API ----------------------------
 app.post("/order-status", async (req, res) => {
   try {
+    console.log('/order-status api do')
     const { phone, order_id, status, order_type, location_title, estimated_time, additional_info } = req.body;
     if (!phone || !order_id || !status) return res.status(400).json({ success: false, error: "Обязательные поля: phone, order_id, status" });
 
@@ -1576,19 +1577,25 @@ app.post("/order-status", async (req, res) => {
       phone_no_id, phone, order_id, status, order_type, location_title, estimated_time, additional_info
     );
 
+    console.log('/order-status api success')
+
     if (result.success) res.status(200).json({ success: true, message: "Уведомление отправлено", whatsapp_message_id: result.message_id });
     else res.status(500).json({ success: false, error: result.error });
   } catch {
+    console.log('/order-status api failed')
     res.status(500).json({ success: false, error: "Внутренняя ошибка сервера" });
   }
 });
 
 async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, status, orderType = 'pickup', locationTitle = '', estimatedTime = '', additionalInfo = '') {
   try {
+    console.log('sendOrderStatusNotification')
     const message = await formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, customerPhone.replace("+", ""));
     const response = await sendMessage(phone_no_id, customerPhone.replace("+", ""), message);
+    console.log('sendOrderStatusNotification success')
     return { success: true, message_id: response.messages?.[0]?.id };
   } catch (error) {
+    console.log(`sendOrderStatusNotification error $error`)
     return { success: false, error: error.message };
   }
 }
