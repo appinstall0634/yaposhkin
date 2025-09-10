@@ -1591,6 +1591,7 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
   try {
     console.log('sendOrderStatusNotification')
     const message = await formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, customerPhone.replace("+", ""));
+    console.log(`sendOrderStatusNotification message is ${message}`)
     const response = await sendMessage(phone_no_id, customerPhone.replace("+", ""), message);
     console.log('sendOrderStatusNotification success')
     return { success: true, message_id: response.messages?.[0]?.id };
