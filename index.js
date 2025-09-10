@@ -1595,7 +1595,7 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
     console.log('sendOrderStatusNotification success')
     return { success: true, message_id: response.messages?.[0]?.id };
   } catch (error) {
-    console.log(`sendOrderStatusNotification error $error`)
+    console.log(`sendOrderStatusNotification error ${error}`)
     return { success: false, error: error.message };
   }
 }
