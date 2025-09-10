@@ -1258,6 +1258,8 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
     console.log(`ERROR ORDER IS 2 : ${preorderResponse.data}`)
 
     console.log(`ERROR ORDER IS 2 : ${preorderResponse.data.error}`)
+    
+    console.log('ERROR ORDER IS 2 :', JSON.stringify(preorderResponse.data, null, 2));
 
     if (preorderResponse.data?.error) {
       throw { response: { status: 200, data: preorderResponse.data } };
