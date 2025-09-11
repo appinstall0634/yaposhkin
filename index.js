@@ -1501,9 +1501,9 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
       successMessage = lan === 'kg'
         ? '🎉 Буйрутмаңыз кабыл алынды!\n\n'
         : '🎉 Ваш заказ принят!\n\n';
-      successMessage += lan === 'kg'
-        ? `📋 Буйрутма номери: ${preorderResponse.data.preorder_id}\n\n`
-        : `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n\n`;
+      // successMessage += lan === 'kg'
+      //   ? `📋 Буйрутма номери: ${preorderResponse.data.preorder_id}\n\n`
+      //   : `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n\n`;
 
       if (orderType === 'pickup') {
         successMessage += lan === 'kg' ? `🏪 Алуучу филиал:\n` : `🏪 Самовывоз из филиала:\n`;
@@ -1767,7 +1767,8 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
   // const S = normalizeStatus(status);
   const ordType = userState?.order_type;
 
-  let m = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
+  let m = '';
+  // let m = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
 
   switch (status) {
     case 'NEW':
