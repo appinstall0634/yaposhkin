@@ -89,6 +89,39 @@ const contact_branch = {
 //   }
 // }
 
+const ERR = {
+  LOCATION_CLOSED: 'LOCATION_CLOSED',
+  SOLD_OUT: 'SOLD_OUT',
+  DELIVERY_UNAVAILABLE: 'DELIVERY_UNAVAILABLE',
+  VALIDATION: 'VALIDATION',
+  UNKNOWN: 'UNKNOWN',
+};
+
+function classifyPreorderError(error) {
+  const http = error?.response?.status;
+  const data = error?.response?.data || {};
+  const e = data.error || {};
+  const type = String(e.type || '').toUpperCase();
+  const desc = String(e.description || data.message || '').toLowerCase();
+
+  let code = ERR.UNKNOWN;
+  if (type.includes('LOCATIONISCLOSEDEXCEPTION') || desc.includes('location is closed')) code = ERR.LOCATION_CLOSED;
+  else if (type.includes('SOLDOUT') || desc.includes('soldout') || desc.includes('out of stock') || desc.includes('unavailable')) code = ERR.SOLD_OUT;
+  else if (type.includes('DELIVERYUNAVAILABLE') || desc.includes('delivery unavailable') || http === 404) code = ERR.DELIVERY_UNAVAILABLE;
+  else if (http === 400) code = ERR.VALIDATION;
+
+  const productIds = e.productIds || data.productIds || [];
+  return { code, productIds, description: e.description || data.message || '' };
+}
+
+function listUnavailable(orderItems, ids) {
+  return ids
+    .map(pid => orderItems.find(o => Number(o.id) === Number(pid))?.title)
+    .filter(Boolean)
+    .join('\n');
+}
+
+
 async function analyzeCustomerIntent(messageText) {
   try {
     const { text } = await generateText({
@@ -1267,12 +1300,75 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
 
     await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle, locationId);
   } catch (error) {
-    console.log(`оформление заказа ошибка: ${error.message}`)
-    let errorMessage = lan === 'ru' ? '❌ Ошибка оформления заказа.' : '❌ Заказ берүүдө ката.';
+  console.error('❌ Ошибка отправки заказа в API:', error);
+
+  const lan = await getUserLan(from);
+  const t = (ru, kg) => lan === 'ru' ? ru : kg;
+
+  const { code, productIds, description } = classifyPreorderError(error);
+  let errorMessage = '';
+
+  if (code === ERR.LOCATION_CLOSED) {
+    const workingHours = await getLocationWorkingHours(locationId);
+    errorMessage =
+      (orderType === 'delivery'
+        ? t('⏰ Доставка сейчас недоступна.\n\n', '⏰ Азыр жеткирүү жеткиликтүү эмес.\n\n')
+        : t('⏰ Самовывоз сейчас недоступен.\n\n', '⏰ Азыр өзү алып кетүү жеткиликтүү эмес.\n\n')) +
+      t(`🏪 Филиал "${locationTitle}" закрыт.\n`, `🏪 "${locationTitle}" филиалы жабык.\n`) +
+      (workingHours ? t(`🕐 Режим работы: ${workingHours}\n\n`, `🕐 Иш убактысы: ${workingHours}\n\n`) : '') +
+      t(`Вы можете оформить заказ в рабочее время.`, `Иш убактысында заказ бере аласыз.`);
     await sendMessage(phone_no_id, from, errorMessage);
+
+    // оставляем контекст, предлагаем переоформить
+    await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE, lan);
+    await setResumeCheckpoint(from, { kind: 'flow' });
+    await checkCustomerAndSendFlow(phone_no_id, from, lan);
+    return;
+  }
+
+  if (code === ERR.SOLD_OUT) {
+    const names = listUnavailable(orderItems, productIds);
+    errorMessage =
+      t('❌ Эти позиции сейчас недоступны:\n\n', '❌ Бул позициялар азыр жеткиликсиз:\n\n') +
+      (names ? `${names}\n\n` : '') +
+      t(`Выберите альтернативы из каталога или свяжитесь с менеджером ${contact_branch[locationId]}.`,
+        `Каталогдон альтернатива тандаңыз же менеджер менен байланышыңыз ${contact_branch[locationId]}.`);
+    await sendMessage(phone_no_id, from, errorMessage);
+
+    await sendCatalog(phone_no_id, from);
+    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+    return;
+  }
+
+  if (code === ERR.DELIVERY_UNAVAILABLE) {
+    errorMessage = t(
+      `❌ Доставка по этому адресу недоступна.\n\nСвяжитесь с менеджером ${contact_branch[locationId]} или выберите самовывоз.`,
+      `❌ Бул дарекке жеткирүү жеткиликсиз.\n\nМенеджер менен ${contact_branch[locationId]} байланышып, же өзү алып кетүүнү тандаңыз.`
+    );
+  } else if (code === ERR.VALIDATION) {
+    errorMessage = t(
+      `❌ Ошибка в данных заказа.\n\nПопробуйте оформить заново или свяжитесь с менеджером ${contact_branch[locationId]}.`,
+      `❌ Заказ маалыматарында ката.\n\nКайра аракет кылыңыз же менеджерге ${contact_branch[locationId]} кайрылыңыз.`
+    );
+  } else {
+    errorMessage = t(
+      `❌ Ошибка оформления заказа.\n\n${description ? `Детали: ${description}\n\n` : ''}Свяжитесь с менеджером ${contact_branch[locationId]}.`,
+      `❌ Заказ берүүдө ката.\n\n${description ? `Деталдар: ${description}\n\n` : ''}Менеджерге ${contact_branch[locationId]} кайрылыңыз.`
+    );
+  }
+
+  await sendMessage(phone_no_id, from, errorMessage);
+
+  // чистим состояние только при «неисправимых» ошибках
+  if (code === ERR.SOLD_OUT) {
+    // уже обработано выше (каталог + CATALOG_ORDER)
+  } else if (code === ERR.LOCATION_CLOSED) {
+    // уже обработано выше (flow перезапуск)
+  } else {
     await deleteUserState(from);
     await clearUserWaitingState(from);
   }
+}
 }
 
 // ---------------------------- Branch info ----------------------------
