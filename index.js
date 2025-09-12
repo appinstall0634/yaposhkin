@@ -1268,7 +1268,92 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
 
     await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count);
   } catch (error) {
-    await sendMessage(phone_no_id, from, `❌ Критическая ошибка при оформлении заказа. Свяжитесь с менеджером ${contact_branch['1']}.`);
+    const desc = (error.response?.data?.error?.description || "").toLowerCase();
+  const type = (error.response?.data?.error?.type || "").toLowerCase();
+  const status = error.response?.status;
+
+  // 1) Филиал закрыт
+  if (desc.includes("location is closed") || type === "locationisclosedexception") {
+    const hours = await getLocationWorkingHours(locationId);
+    let msg;
+    if (lan === "kg") {
+      msg = `⏰ Тилекке каршы, азыр ${orderType === "delivery" ? "жеткирүү" : "өзү алып кетүү"} мүмкүн эмес.\n` +
+            `🏪 "${locationTitle}" филиалы жабык.\n` +
+            (hours ? `🕐 Иш убактысы: ${hours}\n\n` : "\n") +
+            `Иш убактысында заказ бере аласыз.`;
+    } else {
+      msg = `⏰ К сожалению, сейчас ${orderType === "delivery" ? "доставка" : "самовывоз"} недоступен.\n` +
+            `🏪 Филиал "${locationTitle}" закрыт.\n` +
+            (hours ? `🕐 Режим работы: ${hours}\n\n` : "\n") +
+            `Вы можете оформить заказ в рабочее время.`;
+    }
+    await sendMessage(phone_no_id, from, msg);
+    await deleteUserState(from);
+    await clearUserWaitingState(from);
+    return;
+  }
+
+  // 2) Товары закончились / недоступны
+  if (desc.includes("out of stock") || desc.includes("unavailable") || type === "soldoutproductexception") {
+    const ids = error.response?.data?.error?.productIds || [];
+    const unavailable = ids
+      .map(pid => orderItems.find(o => o.id === pid)?.title)
+      .filter(Boolean)
+      .join("\n");
+
+    let msg;
+    if (lan === "kg") {
+      msg = `❌ Тилекке каршы, айрым товарлар азыр жок.\n\n` +
+            (unavailable ? `${unavailable}\n\n` : "") +
+            `Каталогдон башка тамактарды тандаңыз же менеджерге кайрылыңыз.`;
+    } else {
+      msg = `❌ К сожалению, некоторые позиции сейчас недоступны.\n\n` +
+            (unavailable ? `${unavailable}\n\n` : "") +
+            `Выберите альтернативы в каталоге или свяжитесь с менеджером.`;
+    }
+    await sendMessage(phone_no_id, from, msg);
+    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+    await sendCatalog(phone_no_id, from);
+    return;
+  }
+
+  // 3) Типовые статусы HTTP
+  if (status === 400) {
+    await sendMessage(
+      phone_no_id,
+      from,
+      lan === "kg"
+        ? "❌ Заказ маалыматтарында ката. Кайра берип көрүңүз."
+        : "❌ Ошибка в данных заказа. Попробуйте оформить заново."
+    );
+  } else if (status === 404) {
+    await sendMessage(
+      phone_no_id,
+      from,
+      lan === "kg"
+        ? "❌ Тандалган филиал жеткиликсиз. Кийинчерээк аракет кылыңыз."
+        : "❌ Выбранный филиал недоступен. Попробуйте позже."
+    );
+  } else if (status === 500) {
+    await sendMessage(
+      phone_no_id,
+      from,
+      lan === "kg"
+        ? "❌ Серверде техникалык көйгөйлөр. Бир аздан кийин аракет кылыңыз."
+        : "❌ Технические неполадки на сервере. Повторите попытку позже."
+    );
+  } else {
+    // 4) Общий фолбэк
+    const txt = error.response?.data?.error?.description || error.message || "Unknown error";
+    await sendMessage(
+      phone_no_id,
+      from,
+      lan === "kg"
+        ? `❌ Заказ берүүдө ката: ${txt}`
+        : `❌ Ошибка оформления заказа: ${txt}`
+    );
+  }
+    // await sendMessage(phone_no_id, from, `❌ Критическая ошибка при оформлении заказа. Свяжитесь с менеджером ${contact_branch['1']}.`);
     await deleteUserState(from);
     await deleteUserOrders(from);
     await clearUserWaitingState(from);
