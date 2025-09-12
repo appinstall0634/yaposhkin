@@ -972,7 +972,11 @@ async function fetchAndConvertMenuData() {
     let orderType = userState.order_type || "pickup";
     let deliveryAddress = "";
 
-    if (orderType === 'delivery') {
+    const branchInfo = await getBranchInfo(userState.branch);
+        if (branchInfo) {
+          locationId = parseInt(userState.branch);
+        }else{
+          if (orderType === 'delivery') {
       let address = null;
       let tempLat = null;
       let tempLon = null;
@@ -999,15 +1003,13 @@ async function fetchAndConvertMenuData() {
         console.error('координаты недоступны');
       }
 
-    }
-    const branchInfo = await getBranchInfo(userState.branch);
-        if (branchInfo) {
-          locationId = parseInt(userState.branch);
-        }else{
-          const deliveryResponse = await axios.get(`${TEMIR_API_BASE}/qr/delivery/?lat=${tempLat}&lon=${tempLon}`);
+      const deliveryResponse = await axios.get(`${TEMIR_API_BASE}/qr/delivery/?lat=${tempLat}&lon=${tempLon}`);
         if (deliveryResponse.data[0]) {
           locationId = deliveryResponse.data[0].restaurant_id;
         }
+
+    }
+          
         }
 
 
