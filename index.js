@@ -963,9 +963,55 @@ async function getProductInfo(productId) {
   return { id: p.id, api_id: p.api_id, title: p.title, measure_unit: p.measure_unit_title || 'шт' };
 }
 
-async function fetchAndConvertMenuData() {
+async function fetchAndConvertMenuData(locationId) {
   try {
-    const response = await axios.get('https://ya.temir.me/qr/catalog');
+    let userState = await getUserState(from);
+    let locationId = 1;
+
+
+    let orderType = userState.order_type || "pickup";
+    let deliveryAddress = "";
+
+    if (orderType === 'delivery') {
+      let address = null;
+      let tempLat = null;
+      let tempLon = null;
+
+      if (userState.delivery_choice === 'new' || userState.location_processed) {
+        const addresses = customerData.customer.addresses || [];
+        address = addresses[addresses.length - 1];
+        deliveryAddress = userState.new_address || userState.delivery_address || address?.full_address || "";
+        if (address?.geocoding_json) {
+          tempLat = address.geocoding_json.latitude;
+          tempLon = address.geocoding_json.longitude;
+        }
+      } else {
+        const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
+        address = customerData.customer.addresses.find(item => item.id == addressIndex);
+        deliveryAddress = address?.full_address || "";
+        if (address?.geocoding_json) {
+          tempLat = address.geocoding_json.latitude;
+          tempLon = address.geocoding_json.longitude;
+        }
+      }
+
+      if (!tempLat || !tempLon) {
+        console.error('координаты недоступны');
+      }
+
+    }
+    const branchInfo = await getBranchInfo(userState.branch);
+        if (branchInfo) {
+          locationId = parseInt(userState.branch);
+        }else{
+          const deliveryResponse = await axios.get(`${TEMIR_API_BASE}/qr/delivery/?lat=${tempLat}&lon=${tempLon}`);
+        if (deliveryResponse.data[0]) {
+          locationId = deliveryResponse.data[0].restaurant_id;
+        }
+        }
+
+
+    const response = await axios.get(`https://ya.temir.me/qr/catalog?location_id=${locationId}`);
     const apiData = response.data;
     const products = await getAllProductsForSections();
     const optimizedMenuGroups = await Promise.all(
@@ -1798,8 +1844,8 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
       break;
     case 'DELIVERED':
     case 'DONE':
-      m += lan === 'ru' ? '✅ Заказ закрыт. Спасибо.\n'
-                        : '✅ Буйрутма жабылды. Рахмат.\n';
+      m += lan === 'ru' ? '✅ Заказ успешно выполнено. Спасибо.\n'
+                        : '✅ Буйрутма ийгиликтүү аткарылды. Рахмат.\n';
       await deleteUserState(from);
       await clearUserWaitingState(from);
       break;
