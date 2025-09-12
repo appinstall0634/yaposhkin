@@ -963,71 +963,64 @@ async function getProductInfo(productId) {
   return { id: p.id, api_id: p.api_id, title: p.title, measure_unit: p.measure_unit_title || 'шт' };
 }
 
-async function fetchAndConvertMenuData() {
-  try {
-    let userState = await getUserState(from);
-    let locationId = 1;
+async function resolveLocationId(from) {
+  const userState = (await getUserState(from)) || {};
+  let locationId = null;
 
-
-    let orderType = userState.order_type || "pickup";
-    let deliveryAddress = "";
-
-    const branchInfo = await getBranchInfo(userState.branch);
-        if (branchInfo) {
-          locationId = parseInt(userState.branch);
-        }else{
-          if (orderType === 'delivery') {
-      let address = null;
-      let tempLat = null;
-      let tempLon = null;
-
-      if (userState.delivery_choice === 'new' || userState.location_processed) {
-        const addresses = customerData.customer.addresses || [];
-        address = addresses[addresses.length - 1];
-        deliveryAddress = userState.new_address || userState.delivery_address || address?.full_address || "";
-        if (address?.geocoding_json) {
-          tempLat = address.geocoding_json.latitude;
-          tempLon = address.geocoding_json.longitude;
-        }
-      } else {
-        const addressIndex = parseInt(userState.delivery_choice.replace('address_', ''));
-        address = customerData.customer.addresses.find(item => item.id == addressIndex);
-        deliveryAddress = address?.full_address || "";
-        if (address?.geocoding_json) {
-          tempLat = address.geocoding_json.latitude;
-          tempLon = address.geocoding_json.longitude;
-        }
-      }
-
-      if (!tempLat || !tempLon) {
-        console.error('координаты недоступны');
-      }
-
-      const deliveryResponse = await axios.get(`${TEMIR_API_BASE}/qr/delivery/?lat=${tempLat}&lon=${tempLon}`);
-        if (deliveryResponse.data[0]) {
-          locationId = deliveryResponse.data[0].restaurant_id;
-        }
-
+  // pickup: приоритет выбранной ветки, иначе первый ресторан
+  if (userState.order_type !== 'delivery') {
+    if (userState.branch) {
+      const branchInfo = await getBranchInfo(String(userState.branch));
+      if (branchInfo) return parseInt(branchInfo.id);
     }
-          
-        }
+    const restaurants = (await axios.get(`${TEMIR_API_BASE}/qr/restaurants`)).data || [];
+    if (restaurants[0]) return restaurants[0].external_id;
+    return 1; // запасной вариант
+  }
 
+  // delivery: берем координаты адреса
+  const { data: customerData } = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
+  let address = null;
 
-    const response = await axios.get(`https://ya.temir.me/qr/catalog?location_id=${locationId}`);
-    const apiData = response.data;
+  if (userState.delivery_choice === 'new' || userState.location_processed) {
+    const addresses = customerData.customer.addresses || [];
+    address = addresses[addresses.length - 1] || null;
+  } else if (userState.delivery_choice?.startsWith('address_')) {
+    const id = parseInt(userState.delivery_choice.replace('address_', ''));
+    address = (customerData.customer.addresses || []).find(a => a.id == id) || null;
+  }
+
+  const geo = address?.geocoding_json || address?.geocoding || null;
+  const lat = geo?.latitude, lon = geo?.longitude;
+  if (!lat || !lon) return null;
+
+  const delivery = (await axios.get(`${TEMIR_API_BASE}/qr/delivery/?lat=${lat}&lon=${lon}`)).data || [];
+  if (delivery[0]?.restaurant_id) locationId = delivery[0].restaurant_id;
+
+  return locationId || null;
+}
+
+async function fetchAndConvertMenuData(from) {
+  try {
+    const locationId = await resolveLocationId(from);
+    if (!locationId) return null;
+
+    const { data: apiData } = await axios.get(`${TEMIR_API_BASE}/qr/catalog?location_id=${locationId}`);
     const products = await getAllProductsForSections();
-    const optimizedMenuGroups = await Promise.all(
-      apiData.map(async (group) => {
-        return await Promise.all(
-          group.map(async (section) => {
-            const productIds = await Promise.all(section.products.map(api_id => products[api_id].id));
-            return { section_title: section.section_title, products: productIds };
-          })
-        );
-      })
+
+    // apiData = массив групп; каждая группа = массив секций
+    const optimizedMenuGroups = apiData.map(group =>
+      group.map(section => ({
+        section_title: section.section_title,
+        products: (section.products || [])
+          .map(api_id => products[api_id]?.id)
+          .filter(Boolean)
+      }))
     );
+
     return optimizedMenuGroups;
-  } catch {
+  } catch (e) {
+    console.error('fetchAndConvertMenuData error:', e);
     return null;
   }
 }
@@ -1069,7 +1062,7 @@ async function sendCatalog(phone_no_id, to) {
   const lan = await getUserLan(to);
   try {
     const catalogId = process.env.CATALOG_ID;
-    const categoryGroups = await fetchAndConvertMenuData();
+    const categoryGroups = await fetchAndConvertMenuData(to);
     if (!catalogId || !categoryGroups) throw new Error('catalog missing');
 
     for (let i = 0; i < categoryGroups.length; i++) {
