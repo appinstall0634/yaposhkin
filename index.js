@@ -1124,6 +1124,45 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
   }
 }
 
+// utils
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+async function getLocationWorkingHours(locationId) {
+  try {
+    const { data: restaurants } = await axios.get(`${TEMIR_API_BASE}/qr/restaurants`);
+    const r = restaurants.find(x => String(x.external_id) === String(locationId));
+    if (!r) return null;
+
+    // 1) Явно "на сегодня"
+    const t = r.working_hours_today || r.workingHoursToday || null;
+    if (t) {
+      const open = t.open || t.openTime || t.start || t.from;
+      const close = t.close || t.closeTime || t.end || t.to;
+      if (open && close) return `${open} - ${close}`;
+    }
+
+    // 2) По дням недели
+    const daysEn = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const todayKey = daysEn[new Date().getDay()];
+    const wh = r.working_hours || r.workingHours || r.schedule || null;
+    if (wh && wh[todayKey]) {
+      const d = wh[todayKey];
+      const open = d.open || d.openTime || d.start || d.from;
+      const close = d.close || d.closeTime || d.end || d.to;
+      if (open && close) return `${open} - ${close}`;
+      if (typeof d === 'string') return d;
+    }
+
+    // 3) Одна строка
+    if (typeof r.working_hours === 'string') return r.working_hours;
+    if (typeof r.workingHours === 'string') return r.workingHours;
+
+    return "11:00 - 23:45";
+  } catch {
+    return "11:00 - 23:45";
+  }
+}
+
 // ---------------------------- Delivery calc + submit ----------------------------
 async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, paramUserState) {
   const lan = await getUserLan(from);
