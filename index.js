@@ -963,7 +963,7 @@ async function getProductInfo(productId) {
   return { id: p.id, api_id: p.api_id, title: p.title, measure_unit: p.measure_unit_title || 'шт' };
 }
 
-async function fetchAndConvertMenuData(locationId) {
+async function fetchAndConvertMenuData() {
   try {
     let userState = await getUserState(from);
     let locationId = 1;
