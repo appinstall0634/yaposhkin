@@ -1335,9 +1335,9 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
     
     console.log('ERROR ORDER IS 2 :', JSON.stringify(preorderResponse.data, null, 2));
 
-    // if (preorderResponse.data?.error) {
-    //   throw { response: { status: 200, data: preorderResponse.data } };
-    // }
+    if (preorderResponse.data?.error) {
+      throw { response: { status: 200, data: preorderResponse.data } };
+    }
 
     await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle, locationId);
   } catch (error) {
