@@ -95,6 +95,7 @@ const ERR = {
   DELIVERY_UNAVAILABLE: 'DELIVERY_UNAVAILABLE',
   VALIDATION: 'VALIDATION',
   UNKNOWN: 'UNKNOWN',
+  MIN_AMOUNT:'MIN_AMOUNT',
 };
 
 function classifyPreorderError(error) {
@@ -1311,6 +1312,22 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
   const type = (error.response?.data?.error?.type || "").toLowerCase();
   const status = error.response?.status;
 
+  const { code, minAmount, description } = classifyPreorderError(error);
+  const t = (ru, kg) => (lan) === 'ru' ? ru : kg;
+
+  if (code === ERR.MIN_AMOUNT) {
+    const need = (minAmount && itemsAmount) ? Math.max(minAmount - itemsAmount, 0) : null;
+    let msg = t('❌ Для доставки не хватает суммы заказа.\n\n', '❌ Жеткируу үчүн сумма жетишсиз.\n\n');
+    if (minAmount) msg += t(`Минимум для доставки: ${minAmount} KGS\n`, `Жеткируу минималдуу: ${minAmount} KGS\n`);
+    if (need)    msg += t(`Не хватает: ${need} KGS\n\n`, `Жетпейт: ${need} KGS\n\n`);
+    msg += t('Добавьте блюда в корзину или выберите самовывоз.',
+             'Дагы тамак кошуңуз же өзү алып кетүүнү тандаңыз.');
+    await sendMessage(phone_no_id, from, msg);
+    await sendCatalog(phone_no_id, from);
+    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+    return;
+  }
+
   // 1) Филиал закрыт
   if (desc.includes("location is closed") || type === "locationisclosedexception") {
     const hours = await getLocationWorkingHours(locationId);
@@ -1398,6 +1415,26 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
     await deleteUserOrders(from);
     await clearUserWaitingState(from);
   }
+}
+
+function classifyPreorderError(error) {
+  const data = error?.response?.data || {};
+  const e = data.error || {};
+  const type = String(e.type || '').toUpperCase();
+  const desc = String(e.description || data.message || '').toLowerCase();
+
+  let code = null, minAmount = e.minOrderAmount || e.minOrderSum || null;
+
+  if (type.includes('DELIVERYNOTAVAILABLEFORAMOUNTEXCEPTION') ||
+      desc.includes('not available for amount'))
+    code = ERR.MIN_AMOUNT;
+
+  if (!minAmount) {
+    const m = /(min(?:imum)?\s*(?:order)?\s*(?:sum|amount)\D+(\d+))/i.exec(e.description || '');
+    if (m) minAmount = Number(m[2]);
+  }
+
+  return { code, minAmount, description: e.description || '' };
 }
 
 // ---------------------------- Payment QR ----------------------------
