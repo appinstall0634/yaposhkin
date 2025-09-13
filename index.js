@@ -1374,6 +1374,7 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
         : "❌ Выбранный филиал недоступен. Попробуйте позже."
     );
   } else if (status === 500) {
+    console.error(`Технические неполадки на сервере: ${error.response?.data?.error?.description || error.message || "Unknown error"}`)
     await sendMessage(
       phone_no_id,
       from,
