@@ -1050,7 +1050,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
     type: "interactive",
     interactive: {
       type: "product_list",
-      header: { type: "text", text: '' },
+      header: { type: "text", text: headerText },
       // body: { text: lan === 'kg' ? "Тамактарды танданыз:" : "Выберите блюда:" },
       body: { text: headerText },
       footer: { text: "" },
