@@ -1053,7 +1053,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
       header: { type: "text", text: headerText },
       // body: { text: lan === 'kg' ? "Тамактарды танданыз:" : "Выберите блюда:" },
       body : headerText,
-      // footer: { text: "Yaposhkin Rolls" },
+      footer: { text: "Yaposhkin Rolls" },
       action: { catalog_id: catalogId, sections }
     }
   };
