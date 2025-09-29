@@ -1051,8 +1051,7 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
     interactive: {
       type: "product_list",
       header: { type: "text", text: headerText },
-      // body: { text: lan === 'kg' ? "Тамактарды танданыз:" : "Выберите блюда:" },
-      body : headerText,
+      body: { text: lan === 'kg' ? "Тамактарды танданыз:" : "Выберите блюда:" },
       footer: { text: "Yaposhkin Rolls" },
       action: { catalog_id: catalogId, sections }
     }
