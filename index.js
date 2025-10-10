@@ -1,5 +1,5 @@
-// index.js — обновленная версия с AI-помощью в середине оформления заказа
-// Внимание: файл цельный. Вставьте как есть и проверьте переменные окружения.
+// index.js — версия с открытым меню-сайтом и POST /menu-order
+// Вставьте как есть и проверьте переменные окружения.
 
 // ---------------------------- Imports ----------------------------
 const { generateText } = require('ai');
@@ -22,6 +22,7 @@ const token = process.env.TOKEN;
 const mytoken = process.env.MYTOKEN;
 
 const TEMIR_API_BASE = 'https://ya.temir.me';
+const MENU_URL = process.env.MENU_URL; // <— URL вашего сайта меню
 
 // Flow IDs
 const NEW_CUSTOMER_FLOW_ID = '822959930422520';     // RU newCustomer
@@ -46,7 +47,7 @@ const WAITING_STATES = {
   LOCATION: 'location',
   CATALOG_ORDER: 'catalog_order',
   ORDER_STATUS: 'order-status',
-  HELP_CONFIRM: 'help_confirm' // <— новый: подтверждение после ответа AI
+  HELP_CONFIRM: 'help_confirm' // подтверждение после ответа AI
 };
 
 const contact_branch = {
@@ -55,41 +56,7 @@ const contact_branch = {
   '32' : '0704063676'
 };
 
-// ---------------------------- AI Intent ----------------------------
-// async function analyzeCustomerIntent(messageText) {
-//   try {
-//     const { text } = await generateText({
-//       model: openai('gpt-4o'),
-//       messages: [
-//         {
-//           role: 'system',
-//           content: `Ты эксперт-аналитик намерений клиентов ресторана "Yaposhkin Rolls".
-// Верни строго одну строку в формате:
-// <INTENT>|<lang>
-// Где <INTENT> один из:
-// ORDER_INTENT, ORDER_STATUS, ORDER_TRACKING, PICKUP_ADDRESS, MENU_QUESTION, ORDER_FOR_ANOTHER, PAYMENT_METHOD, OTHER_INTENT
-// А <lang> один из: ru, kg.
-// `
-//         },
-//         { role: 'user', content: messageText }
-//       ],
-//       maxTokens: 20,
-//       temperature: 0.0
-//     });
-
-//     const parts = text.trim().split('|');
-//     if (parts.length >= 2) {
-//       const intent = parts[0].trim();
-//       const language = parts[1].trim();
-//       return { intent, isOrderIntent: intent === 'ORDER_INTENT', language, originalText: messageText };
-//     }
-//     // fallback
-//     return analyzeIntentFallback(messageText);
-//   } catch {
-//     return analyzeIntentFallback(messageText);
-//   }
-// }
-
+// ---------------------------- ERR map ----------------------------
 const ERR = {
   LOCATION_CLOSED: 'LOCATION_CLOSED',
   SOLD_OUT: 'SOLD_OUT',
@@ -99,31 +66,7 @@ const ERR = {
   MIN_AMOUNT:'MIN_AMOUNT',
 };
 
-function classifyPreorderError(error) {
-  const http = error?.response?.status;
-  const data = error?.response?.data || {};
-  const e = data.error || {};
-  const type = String(e.type || '').toUpperCase();
-  const desc = String(e.description || data.message || '').toLowerCase();
-
-  let code = ERR.UNKNOWN;
-  if (type.includes('LOCATIONISCLOSEDEXCEPTION') || desc.includes('location is closed')) code = ERR.LOCATION_CLOSED;
-  else if (type.includes('SOLDOUT') || desc.includes('soldout') || desc.includes('out of stock') || desc.includes('unavailable')) code = ERR.SOLD_OUT;
-  else if (type.includes('DELIVERYUNAVAILABLE') || desc.includes('delivery unavailable') || http === 404) code = ERR.DELIVERY_UNAVAILABLE;
-  else if (http === 400) code = ERR.VALIDATION;
-
-  const productIds = e.productIds || data.productIds || [];
-  return { code, productIds, description: e.description || data.message || '' };
-}
-
-function listUnavailable(orderItems, ids) {
-  return ids
-    .map(pid => orderItems.find(o => Number(o.id) === Number(pid))?.title)
-    .filter(Boolean)
-    .join('\n');
-}
-
-
+// ---------------------------- AI Intent ----------------------------
 async function analyzeCustomerIntent(messageText) {
   try {
     const { text } = await generateText({
@@ -175,8 +118,7 @@ async function analyzeCustomerIntent(messageText) {
   }
 }
 
-
-// Единая fallback-функция
+// Fallback
 function analyzeIntentFallback(messageText) {
   const text = (messageText || '').toLowerCase();
 
@@ -279,7 +221,7 @@ async function clearUserWaitingState(phone) {
   );
 }
 
-// ---------- Resume checkpoint (для продолжения после вопросов к AI) ----------
+// ---------- Resume checkpoint ----------
 async function setResumeCheckpoint(phone, resume) {
   const now = new Date();
   await userStatesCollection.updateOne(
@@ -299,10 +241,15 @@ async function clearResumeCheckpoint(phone) {
   );
 }
 
+// ---------- Utils ----------
+function normalizePhone(p) {
+  return String(p || '').replace(/[^\d]/g, '');
+}
+
 // ---------------------------- Server start ----------------------------
 async function startServer() {
   await initMongoDB();
-  await getAllProductsForSections();
+  await getAllProductsForSections(); // кэшим продукты (используются при маппинге id)
   app.listen(PORT, () => {
     console.log(`Server on http://localhost:${PORT}`);
   });
@@ -346,7 +293,7 @@ app.post("/webhook", async (req, res) => {
                currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
         await handleFlowResponse(phone_no_id, from, message, body_param);
       }
-      // 3) Заказ из каталога
+      // 3) Заказ из каталога (не используется, оставлено для совместимости)
       else if (message.type === "order" &&
                currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
         await handleCatalogOrderResponse(phone_no_id, from, message);
@@ -372,7 +319,7 @@ app.post("/webhook", async (req, res) => {
           await sendMessage(phone_no_id, from, lan === 'kg' ? '✅ Буйрутмаңыз жокко чыгарылды.' : '✅ Ваш заказ отменен.');
         }
       }
-      // 6) Вопрос в середине процесса: текст во время FLOW_RESPONSE или CATALOG_ORDER
+      // 6) Вопрос в середине процесса: текст во время FLOW_RESPONSE/CATALOG_ORDER/HELP_CONFIRM
       else if (message.type === "text" &&
               (currentWaitingState === WAITING_STATES.FLOW_RESPONSE || currentWaitingState === WAITING_STATES.CATALOG_ORDER || currentWaitingState === WAITING_STATES.HELP_CONFIRM)) {
         await handleMidOrderHelp(phone_no_id, from, message, currentWaitingState, body_param);
@@ -413,33 +360,26 @@ async function handleMidOrderHelp(phone_no_id, from, message, currentWaitingStat
   } else if (analysis.intent === 'OTHER_INTENT') {
     await sendManagerContactMessage(phone_no_id, from, analysis.language);
   } else {
-    // Если это снова ORDER_INTENT — просто предложим продолжить
     const lan = await getUserLan(from);
     await sendMessage(phone_no_id, from, lan === 'kg'
       ? 'Төмөнкү баскычтардын бирин тандаңыз.'
       : 'Выберите один из вариантов ниже.');
   }
 
-  // Сохранить чекпоинт продолжения
-  // Если уже есть, не трогаем. Если нет — поставим по текущему состоянию.
+  // Чекпоинт
   const resume = await getResumeCheckpoint(from);
   if (!resume) {
     if (currentWaitingState === WAITING_STATES.FLOW_RESPONSE) {
-      // Попробуем восстановить контекст для повторной отправки Flow
-      // Из входящих данных можем достать контакты/ветки, но проще хранить заранее.
-      // Здесь просто ставим «flow», а send*Flow подтянет данные заново.
       await setResumeCheckpoint(from, { kind: 'flow' });
     } else if (currentWaitingState === WAITING_STATES.CATALOG_ORDER) {
       await setResumeCheckpoint(from, { kind: 'catalog' });
     }
   }
 
-  // Переводим в состояние подтверждения
   await setUserWaitingState(from, WAITING_STATES.HELP_CONFIRM);
 
   if (heavyMedia) await sleep(1500);
 
-  // Кнопки «Продолжить/Отменить»
   await sendHelpContinueButtons(phone_no_id, from);
 }
 
@@ -479,12 +419,10 @@ async function resumeFlow(phone_no_id, from) {
   }
 
   if (resume.kind === 'flow') {
-    // Проверим клиента и отправим нужный Flow заново
     await checkCustomerAndSendFlow(phone_no_id, from, lan);
     await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE, lan);
-    // чекпоинт оставим, чтобы можно было снова вернуться при следующем вопросе
   } else if (resume.kind === 'catalog') {
-    await sendCatalog(phone_no_id, from);
+    await sendMenuLink(phone_no_id, from);
     await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
   } else {
     await setUserWaitingState(from, WAITING_STATES.NONE);
@@ -599,12 +537,12 @@ async function checkCustomerAndSendFlow(phone_no_id, from, lan) {
       if (lan === 'kg') await sendNewCustomerFlowKy(phone_no_id, from, branches);
       else await sendNewCustomerFlow(phone_no_id, from, branches);
 
-      await setResumeCheckpoint(from, { kind: 'flow' }); // чекпоинт для возобновления
+      await setResumeCheckpoint(from, { kind: 'flow' });
     } else {
       if (lan === 'kg') await sendExistingCustomerFlowKy(phone_no_id, from, customerData.customer, branches);
       else await sendExistingCustomerFlow(phone_no_id, from, customerData.customer, branches);
 
-      await setResumeCheckpoint(from, { kind: 'flow' }); // чекпоинт для возобновления
+      await setResumeCheckpoint(from, { kind: 'flow' });
     }
 
     await setUserWaitingState(from, WAITING_STATES.FLOW_RESPONSE, lan);
@@ -791,15 +729,14 @@ async function registerCustomerWithoutLocation(phone_no_id, from, data) {
     const updateData = { firstName: data.customer_name };
     await axios.post(`${TEMIR_API_BASE}/qr/update-customer/?qr_token=${qr_token}`, updateData);
 
-    let confirmText = `Спасибо за регистрацию, ${data.customer_name}! 🎉\n\nВы выбрали самовывоз.\n\nТеперь выберите блюда из нашего каталога! 🍣`;
+    let confirmText = `Спасибо за регистрацию, ${data.customer_name}! 🎉\n\nВы выбрали самовывоз.\n\nТеперь выберите блюда на нашем сайте: 🍣`;
     if (lan === 'kg') {
-      confirmText = `Катталганыңыз үчүн рахмат, ${data.customer_name}! 🎉\n\nСиз алып кетүүнү тандадыңыз.\n\nЭми биздин каталогдон тамактарды тандаңыз! 🍣`;
+      confirmText = `Катталганыңыз үчүн рахмат, ${data.customer_name}! 🎉\n\nСиз алып кетүүнү тандадыңыз.\n\nЭми биздин сайттан тамактарды тандаңыз! 🍣`;
     }
     await sendMessage(phone_no_id, from, confirmText);
 
-    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-    await setResumeCheckpoint(from, { kind: 'catalog' });
-    await sendCatalog(phone_no_id, from);
+    // отправляем ссылку на сайт меню
+    await sendMenuLink(phone_no_id, from);
   } catch {
     await sendMessage(phone_no_id, from, "Ошибка регистрации. Попробуйте еще раз.");
     await clearUserWaitingState(from);
@@ -838,23 +775,44 @@ async function handleExistingCustomerOrder(phone_no_id, from, data) {
       if (data.order_type === 'delivery') {
         const title = data.user_addresses.find(a => a.id === data.delivery_choice)?.title || '';
         confirmText = lan === 'kg'
-          ? `✅ Эң сонун! Заказ тандалган дарекке жеткирилет.\n\n${title}\n\nКаталогдон тамактарды тандаңыз:`
-          : `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${title}\n\nВыберите блюда из каталога:`;
+          ? `✅ Эң сонун! Заказ тандалган дарекке жеткирилет.\n\n${title}\n\nТандоону сайттан жасаңыз:`
+          : `✅ Отлично! Заказ будет доставлен по выбранному адресу.\n\n${title}\n\nВыберите блюда на сайте:`;
       } else {
         const t = data.branches.find(b => b.id === data.branch)?.title || '';
         confirmText = lan === 'kg'
-          ? `✅ Абдан жакшы! Сиз алып кетүүнү тандадыңыз.\n\n${t}\n\nКаталогдон тамактарды тандаңыз:`
-          : `✅ Отлично! Вы выбрали самовывоз.\n\n${t}\n\nВыберите блюда из каталога:`;
+          ? `✅ Абдан жакшы! Сиз алып кетүүнү тандадыңыз.\n\n${t}\n\nТандоону сайттан жасаңыз:`
+          : `✅ Отлично! Вы выбрали самовывоз.\n\n${t}\n\nВыберите блюда на сайте:`;
       }
       await sendMessage(phone_no_id, from, confirmText);
-      await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-      await setResumeCheckpoint(from, { kind: 'catalog' });
-      await sendCatalog(phone_no_id, from);
+      await sendMenuLink(phone_no_id, from);
     }
   } catch {
     await sendMessage(phone_no_id, from, 'Ошибка. Попробуйте еще раз.');
     await clearUserWaitingState(from);
   }
+}
+
+// ---------------------------- Menu link sender ----------------------------
+async function sendMenuLink(phone_no_id, to) {
+  const lan = await getUserLan(to);
+  const locationId = await resolveLocationId(to);
+  if (!MENU_URL) {
+    await sendMessage(phone_no_id, to, lan === 'kg' ? 'Меню URL орнотулган эмес.' : 'URL меню не настроен.');
+    return;
+  }
+  const u = new URL(MENU_URL);
+  u.searchParams.set('phone', to); // передаём phone в ссылке
+  if(locationId){
+    u.searchParams.set('locationId', locationId);
+  }
+
+  const text = lan === 'kg'
+    ? `🍽️ Меню: ${u.toString()}\nТандап бүткөн соң заказ автоматтык келет.`
+    : `🍽️ Меню: ${u.toString()}\nПосле выбора заказ придёт автоматически.`;
+
+  await sendMessage(phone_no_id, to, text);
+  await setResumeCheckpoint(to, { kind: 'catalog' });
+  await setUserWaitingState(to, WAITING_STATES.CATALOG_ORDER);
 }
 
 // ---------------------------- Location flow ----------------------------
@@ -915,19 +873,17 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
     await setUserState(from, updatedState);
 
     let confirmText = lan === 'kg'
-      ? `Катталганыңыз үчүн рахмат, ${userState.customer_name}! 🎉\n\nДарегиңиз сакталды: ${userState.delivery_address}\n\nЭми буйрутмаларды бере аласыз. Мен сизге азыр биздин каталогду жөнөтөм! 🍣`
-      : `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю вам наш каталог! 🍣`;
+      ? `Катталганыңыз үчүн рахмат, ${userState.customer_name}! 🎉\n\nДарегиңиз сакталды: ${userState.delivery_address}\n\nЭми заказ берсеңиз болот. Мен сизге азыр менюнун ссылкасын жөнөтөм! 🍣`
+      : `Спасибо за регистрацию, ${userState.customer_name}! 🎉\n\nВаш адрес сохранен: ${userState.delivery_address}\n\nТеперь вы можете делать заказы. Сейчас отправлю ссылку на меню! 🍣`;
     if (userState.flow_type !== 'new_customer') {
       confirmText = lan === 'kg'
-        ? `✅ Жаңы дарек кошулду!\n\n📍 ${userState.delivery_address}\n\nЭми каталогдон тамактарды тандаңыз:`
-        : `✅ Новый адрес добавлен!\n\n📍 ${userState.delivery_address}\n\nТеперь выберите блюда из каталога:`;
+        ? `✅ Жаңы дарек кошулду!\n\n📍 ${userState.delivery_address}\n\nЭми сайттан тандаңыз:`
+        : `✅ Новый адрес добавлен!\n\n📍 ${userState.delivery_address}\n\nТеперь выберите блюда на сайте:`;
     }
 
     await sendMessage(phone_no_id, from, confirmText);
 
-    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-    await setResumeCheckpoint(from, { kind: 'catalog' });
-    await sendCatalog(phone_no_id, from);
+    await sendMenuLink(phone_no_id, from);
   } catch (error) {
     await sendMessage(phone_no_id, from, "Произошла ошибка при сохранении данных.");
     await deleteUserState(from);
@@ -935,7 +891,7 @@ async function updateCustomerWithLocation(phone_no_id, from, userState, longitud
   }
 }
 
-// ---------------------------- Catalog / Order ----------------------------
+// ---------------------------- Catalog / Order (совместимость) ----------------------------
 let productsCache = null;
 let productsCacheForSection = null;
 
@@ -965,11 +921,35 @@ async function getProductInfo(productId) {
   return { id: p.id, api_id: p.api_id, title: p.title, measure_unit: p.measure_unit_title || 'шт' };
 }
 
+// (Отправка реального каталога WA оставлена, но не используется)
+async function fetchAndConvertMenuData(from) {
+  try {
+    const locationId = await resolveLocationId(from);
+    if (!locationId) return null;
+
+    const { data: apiData } = await axios.get(`${TEMIR_API_BASE}/qr/catalog?location_id=${locationId}`);
+    const products = await getAllProductsForSections();
+
+    const optimizedMenuGroups = apiData.map(group =>
+      group.map(section => ({
+        section_title: section.section_title,
+        products: (section.products || [])
+          .map(api_id => products[api_id]?.id)
+          .filter(Boolean)
+      }))
+    );
+
+    return optimizedMenuGroups;
+  } catch (e) {
+    console.error('fetchAndConvertMenuData error:', e);
+    return null;
+  }
+}
+
 async function resolveLocationId(from) {
   const userState = (await getUserState(from)) || {};
   let locationId = null;
 
-  // pickup: приоритет выбранной ветки, иначе первый ресторан
   if (userState.order_type !== 'delivery') {
     if (userState.branch) {
       const branchInfo = await getBranchInfo(String(userState.branch));
@@ -977,10 +957,9 @@ async function resolveLocationId(from) {
     }
     const restaurants = (await axios.get(`${TEMIR_API_BASE}/qr/restaurants`)).data || [];
     if (restaurants[0]) return restaurants[0].external_id;
-    return 1; // запасной вариант
+    return 1;
   }
 
-  // delivery: берем координаты адреса
   const { data: customerData } = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
   let address = null;
 
@@ -1002,31 +981,7 @@ async function resolveLocationId(from) {
   return locationId || null;
 }
 
-async function fetchAndConvertMenuData(from) {
-  try {
-    const locationId = await resolveLocationId(from);
-    if (!locationId) return null;
-
-    const { data: apiData } = await axios.get(`${TEMIR_API_BASE}/qr/catalog?location_id=${locationId}`);
-    const products = await getAllProductsForSections();
-
-    // apiData = массив групп; каждая группа = массив секций
-    const optimizedMenuGroups = apiData.map(group =>
-      group.map(section => ({
-        section_title: section.section_title,
-        products: (section.products || [])
-          .map(api_id => products[api_id]?.id)
-          .filter(Boolean)
-      }))
-    );
-
-    return optimizedMenuGroups;
-  } catch (e) {
-    console.error('fetchAndConvertMenuData error:', e);
-    return null;
-  }
-}
-
+// (Совместимость) WA catalog message — не используется
 async function sendProductListWithSections(phone_no_id, to, categories, groupNumber, totalGroups, catalogId, lan) {
   const sections = categories.map(category => ({
     title: category.section_title,
@@ -1038,12 +993,11 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
   else if (categories.length === 2) headerText = `🍣 ${categories[0].section_title} и ${categories[1].section_title}`;
   else if (categories.length === 3) headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} и ${categories[2].section_title}`;
   else if (categories.length === 4) {
-
-            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title}, ${categories[2].section_title} и ${categories[3].section_title}`;
-        } else {
-            const remaining = categories.length - 2;
-            headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} +${remaining} категорий`;
-        }
+    headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title}, ${categories[2].section_title} и ${categories[3].section_title}`;
+  } else {
+    const remaining = categories.length - 2;
+    headerText = `🍣 ${categories[0].section_title}, ${categories[1].section_title} +${remaining} категорий`;
+  }
 
   const productListData = {
     messaging_product: "whatsapp",
@@ -1052,44 +1006,21 @@ async function sendProductListWithSections(phone_no_id, to, categories, groupNum
     interactive: {
       type: "product_list",
       header: { type: "text", text: headerText },
-      // body: { text: lan === 'kg' ? "Тамактарды танданыз:" : "Выберите блюда:" },
       body: { text: headerText },
       footer: { text: "" },
-      action: { catalog_id: catalogId, sections }
+      action: { catalog_id: process.env.CATALOG_ID, sections }
     }
   };
   await sendWhatsAppMessage(phone_no_id, productListData);
 }
 
-async function sendCatalog(phone_no_id, to) {
-  const lan = await getUserLan(to);
-  try {
-    const catalogId = process.env.CATALOG_ID;
-    const categoryGroups = await fetchAndConvertMenuData(to);
-    if (!catalogId || !categoryGroups) throw new Error('catalog missing');
-
-    for (let i = 0; i < categoryGroups.length; i++) {
-      const group = categoryGroups[i];
-      await sendProductListWithSections(phone_no_id, to, group, i + 1, categoryGroups.length, catalogId, lan);
-    }
-    await sendMessage(phone_no_id, to, lan === 'kg'
-      ? 'Каалаган категориядан тамактарды тандаңыз.'
-      : 'Выберите понравившиеся блюда из любой категории.');
-  } catch (error) {
-    await sendMessage(phone_no_id, to, lan === 'kg' ? "Каталогду жөнөтүүдө ката." : "Ошибка отправки каталога.");
-  }
-}
-
+// (Совместимость) Обработка WA-каталога
 async function handleCatalogOrderResponse(phone_no_id, from, message) {
   const lan = await getUserLan(from);
   try {
     const order = message.order;
 
-    console.log(`catalog handle order is: ${JSON.stringify(order)}`);
-    console.log(`catalog handle order2 is: ${JSON.stringify(order.product_items)}`);
-    console.log(`catalog handle order3 is: ${JSON.stringify(message)}`);
-
-    let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\n\n" : "🛒 Ваш заказ:\n\n";
+    let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\н\n" : "🛒 Ваш заказ:\n\n";
     let totalAmount = 0;
     const orderItems = [];
 
@@ -1140,7 +1071,6 @@ async function getLocationWorkingHours(locationId) {
     const r = restaurants.find(x => String(x.external_id) === String(locationId));
     if (!r) return null;
 
-    // 1) Явно "на сегодня"
     const t = r.working_hours_today || r.workingHoursToday || null;
     if (t) {
       const open = t.open || t.openTime || t.start || t.from;
@@ -1148,7 +1078,6 @@ async function getLocationWorkingHours(locationId) {
       if (open && close) return `${open} - ${close}`;
     }
 
-    // 2) По дням недели
     const daysEn = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
     const todayKey = daysEn[new Date().getDay()];
     const wh = r.working_hours || r.workingHours || r.schedule || null;
@@ -1160,7 +1089,6 @@ async function getLocationWorkingHours(locationId) {
       if (typeof d === 'string') return d;
     }
 
-    // 3) Одна строка
     if (typeof r.working_hours === 'string') return r.working_hours;
     if (typeof r.workingHours === 'string') return r.workingHours;
 
@@ -1173,6 +1101,15 @@ async function getLocationWorkingHours(locationId) {
 // ---------------------------- Delivery calc + submit ----------------------------
 async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, totalAmount, orderSummary, paramUserState) {
   const lan = await getUserLan(from);
+
+  // объявляем заранее, чтобы catch видел
+  let deliveryCost = 0;
+  let locationId = null;
+  let locationTitle = "";
+  let orderType = "pickup";
+  let deliveryAddress = "";
+  let utensils_count;
+
   try {
     let userState = paramUserState;
     if (!userState) userState = await getUserState(from);
@@ -1181,12 +1118,8 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
     const customerResponse = await axios.get(`${TEMIR_API_BASE}/qr/customer/?phone=${from}`);
     const customerData = customerResponse.data;
 
-    let deliveryCost = 0;
-    let locationId = null;
-    let locationTitle = "";
-    let orderType = userState.order_type || "pickup";
-    let deliveryAddress = "";
-    let utensils_count = userState.utensils_count;
+    orderType = userState.order_type || "pickup";
+    utensils_count = userState.utensils_count;
 
     if (orderType === 'delivery') {
       let address = null;
@@ -1315,114 +1248,114 @@ async function calculateDeliveryAndSubmitOrder(phone_no_id, from, orderItems, to
     await submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count);
   } catch (error) {
     const desc = (error.response?.data?.error?.description || "").toLowerCase();
-  const type = (error.response?.data?.error?.type || "").toLowerCase();
-  const status = error.response?.status;
+    const type = (error.response?.data?.error?.type || "").toLowerCase();
+    const status = error.response?.status;
 
-  const { code, minAmount, description } = classifyPreorderError(error);
-  const t = (ru, kg) => (lan) === 'ru' ? ru : kg;
+    const { code, minAmount } = classifyPreorderError(error);
+    const t = (ru, kg) => (lan) === 'ru' ? ru : kg;
+    const itemsAmount = totalAmount || 0;
 
-  if (code === ERR.MIN_AMOUNT) {
-    const need = (minAmount && itemsAmount) ? Math.max(minAmount - itemsAmount, 0) : null;
-    let msg = t('❌ Для доставки не хватает суммы заказа.\n\n', '❌ Жеткируу үчүн сумма жетишсиз.\n\n');
-    if (minAmount) msg += t(`Минимум для доставки: ${minAmount} KGS\n`, `Жеткируу минималдуу: ${minAmount} KGS\n`);
-    if (need)    msg += t(`Не хватает: ${need} KGS\n\n`, `Жетпейт: ${need} KGS\n\n`);
-    msg += t('Добавьте блюда в корзину или выберите самовывоз.',
-             'Дагы тамак кошуңуз же өзү алып кетүүнү тандаңыз.');
-    await sendMessage(phone_no_id, from, msg);
-    await sendCatalog(phone_no_id, from);
-    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-    return;
-  }
-
-  // 1) Филиал закрыт
-  if (desc.includes("location is closed") || type === "locationisclosedexception") {
-    const hours = await getLocationWorkingHours(locationId);
-    let msg;
-    if (lan === "kg") {
-      msg = `⏰ Тилекке каршы, азыр ${orderType === "delivery" ? "жеткирүү" : "өзү алып кетүү"} мүмкүн эмес.\n` +
-            `🏪 "${locationTitle}" филиалы жабык.\n` +
-            (hours ? `🕐 Иш убактысы: ${hours}\n\n` : "\n") +
-            `Иш убактысында заказ бере аласыз.`;
-    } else {
-      msg = `⏰ К сожалению, сейчас ${orderType === "delivery" ? "доставка" : "самовывоз"} недоступен.\n` +
-            `🏪 Филиал "${locationTitle}" закрыт.\n` +
-            (hours ? `🕐 Режим работы: ${hours}\n\n` : "\n") +
-            `Вы можете оформить заказ в рабочее время.`;
+    if (code === ERR.MIN_AMOUNT) {
+      const need = (minAmount && itemsAmount) ? Math.max(minAmount - itemsAmount, 0) : null;
+      let msg = t('❌ Для доставки не хватает суммы заказа.\n\n', '❌ Жеткируу үчүн сумма жетишсиз.\n\n');
+      if (minAmount) msg += t(`Минимум для доставки: ${minAmount} KGS\n`, `Жеткируу минималдуу: ${minAmount} KGS\n`);
+      if (need)    msg += t(`Не хватает: ${need} KGS\n\n`, `Жетпейт: ${need} KGS\n\n`);
+      msg += t('Добавьте блюда в корзину или выберите самовывоз.',
+               'Дагы тамак кошуңуз же өзү алып кетүүнү тандаңыз.');
+      await sendMessage(phone_no_id, from, msg);
+      await sendMenuLink(phone_no_id, from);
+      await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+      return;
     }
-    await sendMessage(phone_no_id, from, msg);
-    await deleteUserState(from);
-    await clearUserWaitingState(from);
-    return;
-  }
 
-  // 2) Товары закончились / недоступны
-  if (desc.includes("out of stock") || desc.includes("unavailable") || type === "soldoutproductexception") {
-    const ids = error.response?.data?.error?.productIds || [];
-    const unavailable = ids
-      .map(pid => orderItems.find(o => o.id === pid)?.title)
-      .filter(Boolean)
-      .join("\n");
-
-    let msg;
-    if (lan === "kg") {
-      msg = `❌ Тилекке каршы, айрым товарлар азыр жок.\n\n` +
-            (unavailable ? `${unavailable}\n\n` : "") +
-            `Каталогдон башка тамактарды тандаңыз же менеджерге кайрылыңыз.`;
-    } else {
-      msg = `❌ К сожалению, некоторые позиции сейчас недоступны.\n\n` +
-            (unavailable ? `${unavailable}\n\n` : "") +
-            `Выберите альтернативы в каталоге или свяжитесь с менеджером.`;
+    // 1) Филиал закрыт
+    if (desc.includes("location is closed") || type === "locationisclosedexception") {
+      const hours = await getLocationWorkingHours(locationId);
+      let msg;
+      if (lan === "kg") {
+        msg = `⏰ Тилекке каршы, азыр ${orderType === "delivery" ? "жеткирүү" : "өзү алып кетүү"} мүмкүн эмес.\n` +
+              `🏪 "${locationTitle}" филиалы жабык.\n` +
+              (hours ? `🕐 Иш убактысы: ${hours}\н\n` : "\n") +
+              `Иш убактысында заказ бере аласыз.`;
+      } else {
+        msg = `⏰ К сожалению, сейчас ${orderType === "delivery" ? "доставка" : "самовывоз"} недоступен.\n` +
+              `🏪 Филиал "${locationTitle}" закрыт.\n` +
+              (hours ? `🕐 Режим работы: ${hours}\n\n` : "\n") +
+              `Вы можете оформить заказ в рабочее время.`;
+      }
+      await sendMessage(phone_no_id, from, msg);
+      await deleteUserState(from);
+      await clearUserWaitingState(from);
+      return;
     }
-    await sendMessage(phone_no_id, from, msg);
-    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-    await sendCatalog(phone_no_id, from);
-    return;
-  }
 
-  // 3) Типовые статусы HTTP
-  if (status === 400) {
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Заказ маалыматтарында ката. Кайра берип көрүңүз."
-        : "❌ Ошибка в данных заказа. Попробуйте оформить заново."
-    );
-  } else if (status === 404) {
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Тандалган филиал жеткиликсиз. Кийинчерээк аракет кылыңыз."
-        : "❌ Выбранный филиал недоступен. Попробуйте позже."
-    );
-  } else if (status === 500) {
-    console.error(`Технические неполадки на сервере: ${error.response?.data?.error?.description || error.message || "Unknown error"}`)
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Серверде техникалык көйгөйлөр. Бир аздан кийин аракет кылыңыз."
-        : "❌ Технические неполадки на сервере. Повторите попытку позже."
-    );
-  } else {
-    // 4) Общий фолбэк
-    const txt = error.response?.data?.error?.description || error.message || "Unknown error";
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? `❌ Заказ берүүдө ката: ${txt}`
-        : `❌ Ошибка оформления заказа: ${txt}`
-    );
-  }
-    // await sendMessage(phone_no_id, from, `❌ Критическая ошибка при оформлении заказа. Свяжитесь с менеджером ${contact_branch['1']}.`);
+    // 2) Товары закончились / недоступны
+    if (desc.includes("out of stock") || desc.includes("unavailable") || type === "soldoutproductexception") {
+      const ids = error.response?.data?.error?.productIds || [];
+      const unavailable = ids
+        .map(pid => orderItems.find(o => o.id === pid)?.title)
+        .filter(Boolean)
+        .join("\n");
+
+      let msg;
+      if (lan === "kg") {
+        msg = `❌ Тилекке каршы, айрым товарлар азыр жок.\n\n` +
+              (unavailable ? `${unavailable}\n\n` : "") +
+              `Сайттагы менюдан альтернатива тандаңыз же менеджерге кайрылыңыз.`;
+      } else {
+        msg = `❌ К сожалению, некоторые позиции сейчас недоступны.\n\n` +
+              (unavailable ? `${unavailable}\n\n` : "") +
+              `Выберите альтернативы на сайте меню или свяжитесь с менеджером.`;
+      }
+      await sendMessage(phone_no_id, from, msg);
+      await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+      await sendMenuLink(phone_no_id, from);
+      return;
+    }
+
+    // 3) Типовые статусы HTTP
+    if (status === 400) {
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Заказ маалыматтарында ката. Кайра берип көрүңүз."
+          : "❌ Ошибка в данных заказа. Попробуйте оформить заново."
+      );
+    } else if (status === 404) {
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Тандалган филиал жеткиликсиз. Кийинчерээк аракет кылыңыз."
+          : "❌ Выбранный филиал недоступен. Попробуйте позже."
+      );
+    } else if (status === 500) {
+      console.error(`Технические неполадки на сервере: ${error.response?.data?.error?.description || error.message || "Unknown error"}`)
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Серверде техникалык көйгөйлөр. Бир аздан кийин аракет кылыңыз."
+          : "❌ Технические неполадки на сервере. Повторите попытку позже."
+      );
+    } else {
+      const txt = error.response?.data?.error?.description || error.message || "Unknown error";
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? `❌ Заказ берүүдө ката: ${txt}`
+          : `❌ Ошибка оформления заказа: ${txt}`
+      );
+    }
     await deleteUserState(from);
     await deleteUserOrders(from);
     await clearUserWaitingState(from);
   }
 }
 
+// Классификация ошибок preorder (MIN_AMOUNT)
 function classifyPreorderError(error) {
   const data = error?.response?.data || {};
   const e = data.error || {};
@@ -1495,110 +1428,97 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
       `${TEMIR_API_BASE}/qr/preorder/?qr_token=${customerData.qr_access_token}`, preorderData
     );
 
-    console.log(`ERROR ORDER IS: ${preorderResponse.status}`)
-
-    console.log(`ERROR ORDER IS 2 : ${preorderResponse.data}`)
-
-    console.log(`ERROR ORDER IS 2 : ${preorderResponse.data.error}`)
-    
-    console.log('ERROR ORDER IS 2 :', JSON.stringify(preorderResponse.data, null, 2));
-
     if (preorderResponse.data?.error) {
       throw { response: { status: 200, data: preorderResponse.data } };
     }
 
     await sendOrderSuccessMessage(phone_no_id, from, preorderResponse.data, orderType, finalAmount, locationTitle, locationId);
   } catch (error) {
-  // локализация уже есть выше: const lan = await getUserLan(from);
-  const desc = (error.response?.data?.error?.description || "").toLowerCase();
-  const type = (error.response?.data?.error?.type || "").toLowerCase();
-  const status = error.response?.status;
+    const desc = (error.response?.data?.error?.description || "").toLowerCase();
+    const type = (error.response?.data?.error?.type || "").toLowerCase();
+    const status = error.response?.status;
 
-  // 1) Филиал закрыт
-  if (desc.includes("location is closed") || type === "locationisclosedexception") {
-    const hours = await getLocationWorkingHours(locationId);
-    let msg;
-    if (lan === "kg") {
-      msg = `⏰ Тилекке каршы, азыр ${orderType === "delivery" ? "жеткирүү" : "өзү алып кетүү"} мүмкүн эмес.\n` +
-            `🏪 "${locationTitle}" филиалы жабык.\n` +
-            (hours ? `🕐 Иш убактысы: ${hours}\n\n` : "\n") +
-            `Иш убактысында заказ бере аласыз.`;
-    } else {
-      msg = `⏰ К сожалению, сейчас ${orderType === "delivery" ? "доставка" : "самовывоз"} недоступен.\n` +
-            `🏪 Филиал "${locationTitle}" закрыт.\n` +
-            (hours ? `🕐 Режим работы: ${hours}\n\n` : "\n") +
-            `Вы можете оформить заказ в рабочее время.`;
+    if (desc.includes("location is closed") || type === "locationisclosedexception") {
+      const hours = await getLocationWorkingHours(locationId);
+      let msg;
+      if (lan === "kg") {
+        msg = `⏰ Тилекке каршы, азыр ${orderType === "delivery" ? "жеткирүү" : "өзү алып кетүү"} мүмкүн эмес.\n` +
+              `🏪 "${locationTitle}" филиалы жабык.\n` +
+              (hours ? `🕐 Иш убактысы: ${hours}\n\n` : "\n") +
+              `Иш убактысында заказ бере аласыз.`;
+      } else {
+        msg = `⏰ К сожалению, сейчас ${orderType === "delivery" ? "доставка" : "самовывоз"} недоступен.\n` +
+              `🏪 Филиал "${locationTitle}" закрыт.\n` +
+              (hours ? `🕐 Режим работы: ${hours}\n\n` : "\n") +
+              `Вы можете оформить заказ в рабочее время.`;
+      }
+      await sendMessage(phone_no_id, from, msg);
+      await deleteUserState(from);
+      await clearUserWaitingState(from);
+      return;
     }
-    await sendMessage(phone_no_id, from, msg);
+
+    if (desc.includes("out of stock") || desc.includes("unavailable") || type === "soldoutproductexception") {
+      const ids = error.response?.data?.error?.productIds || [];
+      const unavailable = ids
+        .map(pid => orderItems.find(o => o.id === pid)?.title)
+        .filter(Boolean)
+        .join("\n");
+
+      let msg;
+      if (lan === "kg") {
+        msg = `❌ Тилекке каршы, айрым товарлар азыр жок.\n\n` +
+              (unavailable ? `${unavailable}\n\n` : "") +
+              `Сайттагы менюдан башка тамактарды тандаңыз же менеджерге кайрылыңыз.`;
+      } else {
+        msg = `❌ К сожалению, некоторые позиции сейчас недоступны.\n\n` +
+              (unavailable ? `${unavailable}\n\n` : "") +
+              `Выберите альтернативы на сайте меню или свяжитесь с менеджером.`;
+      }
+      await sendMessage(phone_no_id, from, msg);
+      await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
+      await sendMenuLink(phone_no_id, from);
+      return;
+    }
+
+    if (status === 400) {
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Заказ маалыматтарында ката. Кайра берип көрүңүз."
+          : "❌ Ошибка в данных заказа. Попробуйте оформить заново."
+      );
+    } else if (status === 404) {
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Тандалган филиал жеткиликсиз. Кийинчерээк аракет кылыңыз."
+          : "❌ Выбранный филиал недоступен. Попробуйте позже."
+      );
+    } else if (status === 500) {
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? "❌ Серверде техникалык көйгөйлөр. Бир аздан кийин аракет кылыңыз."
+          : "❌ Технические неполадки на сервере. Повторите попытку позже."
+      );
+    } else {
+      const txt = error.response?.data?.error?.description || error.message || "Unknown error";
+      await sendMessage(
+        phone_no_id,
+        from,
+        lan === "kg"
+          ? `❌ Заказ берүүдө ката: ${txt}`
+          : `❌ Ошибка оформления заказа: ${txt}`
+      );
+    }
+
     await deleteUserState(from);
     await clearUserWaitingState(from);
-    return;
   }
-
-  // 2) Товары закончились / недоступны
-  if (desc.includes("out of stock") || desc.includes("unavailable") || type === "soldoutproductexception") {
-    const ids = error.response?.data?.error?.productIds || [];
-    const unavailable = ids
-      .map(pid => orderItems.find(o => o.id === pid)?.title)
-      .filter(Boolean)
-      .join("\n");
-
-    let msg;
-    if (lan === "kg") {
-      msg = `❌ Тилекке каршы, айрым товарлар азыр жок.\n\n` +
-            (unavailable ? `${unavailable}\n\n` : "") +
-            `Каталогдон башка тамактарды тандаңыз же менеджерге кайрылыңыз.`;
-    } else {
-      msg = `❌ К сожалению, некоторые позиции сейчас недоступны.\n\n` +
-            (unavailable ? `${unavailable}\n\n` : "") +
-            `Выберите альтернативы в каталоге или свяжитесь с менеджером.`;
-    }
-    await sendMessage(phone_no_id, from, msg);
-    await setUserWaitingState(from, WAITING_STATES.CATALOG_ORDER);
-    await sendCatalog(phone_no_id, from);
-    return;
-  }
-
-  // 3) Типовые статусы HTTP
-  if (status === 400) {
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Заказ маалыматтарында ката. Кайра берип көрүңүз."
-        : "❌ Ошибка в данных заказа. Попробуйте оформить заново."
-    );
-  } else if (status === 404) {
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Тандалган филиал жеткиликсиз. Кийинчерээк аракет кылыңыз."
-        : "❌ Выбранный филиал недоступен. Попробуйте позже."
-    );
-  } else if (status === 500) {
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? "❌ Серверде техникалык көйгөйлөр. Бир аздан кийин аракет кылыңыз."
-        : "❌ Технические неполадки на сервере. Повторите попытку позже."
-    );
-  } else {
-    // 4) Общий фолбэк
-    const txt = error.response?.data?.error?.description || error.message || "Unknown error";
-    await sendMessage(
-      phone_no_id,
-      from,
-      lan === "kg"
-        ? `❌ Заказ берүүдө ката: ${txt}`
-        : `❌ Ошибка оформления заказа: ${txt}`
-    );
-  }
-
-  await deleteUserState(from);
-  await clearUserWaitingState(from);
-}
 }
 
 // ---------------------------- Branch info ----------------------------
@@ -1698,8 +1618,8 @@ async function sendLocalPdfDocument(phone_no_id, from, filePath, documentMessage
     };
     await sendWhatsAppMessage(phone_no_id, data);
   } catch {
-    await sendMessage(phone_no_id, from, "Не удалось отправить меню. Откроем каталог:");
-    await sendCatalog(phone_no_id, from);
+    await sendMessage(phone_no_id, from, "Не удалось отправить меню. Откроем сайт меню:");
+    await sendMenuLink(phone_no_id, from);
   }
 }
 
@@ -1731,9 +1651,6 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
       successMessage = lan === 'kg'
         ? '🎉 Буйрутмаңыз кабыл алынды!\n\n'
         : '🎉 Ваш заказ принят!\n\n';
-      // successMessage += lan === 'kg'
-      //   ? `📋 Буйрутма номери: ${preorderResponse.data.preorder_id}\n\n`
-      //   : `📋 Номер заказа: ${preorderResponse.data.preorder_id}\n\n`;
 
       if (orderType === 'pickup') {
         successMessage += lan === 'kg' ? `🏪 Алуучу филиал:\n` : `🏪 Самовывоз из филиала:\n`;
@@ -1747,7 +1664,7 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
         : `💰 Сумма к оплате: ${finalAmount} KGS\n\n`;
 
       successMessage += lan === 'kg'
-        ? '⏳ Буйрутмаңыз даяр болгондо билдирүү келет.\n\n'
+        ? '⏳ Буйрутмаңыз даяр болгондо билдирүү келет.\н\n'
         : '⏳ Ожидайте уведомления о статусе заказа.\n\n';
 
       successMessage += lan === 'kg'
@@ -1930,75 +1847,12 @@ async function sendOrderStatusNotification(phone_no_id, customerPhone, orderId, 
   }
 }
 
-// async function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, from) {
-//   const lan = await getUserLan(from);
-//   const userState = await getUserState(from);
-
-//   let message = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
-
-//   switch (status.toLowerCase()) {
-//     case 'accepted':
-//     case 'подтвержден':
-//       message += lan === 'ru' ? `✅ Ваш заказ подтвержден и принят в работу!\n\n` : `✅ Буйрутмаңыз ырасталды жана иштетүүгө кабыл алынды!\n\n`;
-//       break;
-//     case 'production':
-//     case 'отправлен на кухню':
-//       message += lan === 'ru' ? `👨‍🍳 Наши повара готовят ваш заказ!\n\n` : `👨‍🍳 Биздин ашпозчулар буйрутмаңызды даярдап жатышат!\n\n`;
-//       break;
-//     case 'out_for_delivery':
-//     case 'в_доставке':
-//       message += `🚗 Курьер в пути!\n\n📍 Ваш заказ доставляется по указанному адресу.\n`;
-//       break;
-//     case 'delivered':
-//     case 'доставлен':
-//       message += `✅ Заказ успешно доставлен!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-//       break;
-//     case 'completed':
-//     case 'выполнен':
-//       if (lan === 'ru') {
-//         if (userState?.order_type === 'delivery') {
-//           message += `🎉 Ваш заказ готов и передан курьеру!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-//         } else {
-//           message += `🎉 Ваш заказ готов к выдаче!\n\n🙏 Спасибо за выбор Yaposhkin Rolls!\n`;
-//         }
-//       } else {
-//         if (userState?.order_type === 'delivery') {
-//           message += `🎉 Буйрутмаңыз даяр жана курьерге берилди!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
-//         } else {
-//           message += `🎉 Буйрутмаңыз алып кетүүгө даяр!\n\n🙏 Yaposhkin Rolls тандаганыңыз үчүн рахмат!\n`;
-//         }
-//       }
-//       await deleteUserState(from);
-//       await clearUserWaitingState(from);
-//       break;
-//     case 'cancelled':
-//     case 'отменен':
-//       message += lan === 'ru'
-//         ? `❌ Заказ отменен\n\n😔 Приносим извинения за неудобства.\n`
-//         : `❌ Буйрутма жокко чыгарылды\n\n😔 Ыңгайсыздык үчүн кечирим сурайбыз.\n`;
-//       await deleteUserState(from);
-//       await clearUserWaitingState(from);
-//       break;
-//     case 'delayed':
-//     case 'задержан':
-//       message += `⏰ Небольшая задержка заказа\n\n`;
-//       if (estimatedTime) message += `🕐 Новое ожидаемое время: ${estimatedTime}\n`;
-//       if (additionalInfo) message += `📝 Причина: ${additionalInfo}\n`;
-//       break;
-//     default:
-//       message += `📋 Статус заказа обновлен: ${status}\n\n`;
-//   }
-//   return message;
-// }
-
 async function formatOrderStatusMessage(orderId, status, orderType, locationTitle, estimatedTime, additionalInfo, from) {
   const lan = await getUserLan(from);
   const userState = await getUserState(from);
-  // const S = normalizeStatus(status);
   const ordType = userState?.order_type;
 
   let m = '';
-  // let m = lan === 'ru' ? `📋 Заказ №${orderId}\n` : `📋 Буйрутма №${orderId}\n`;
 
   switch (status) {
     case 'NEW':
@@ -2052,6 +1906,76 @@ async function formatOrderStatusMessage(orderId, status, orderType, locationTitl
   return m;
 }
 
+// ---------------------------- OPEN POST endpoint from menu site ----------------------------
+app.post("/menu-order", async (req, res) => {
+  try {
+    // Поддерживаем оба формата:
+    // A) body = [ {product_retailer_id, quantity, item_price, currency}, ... ], phone в query ?phone=...
+    // B) body = { phone, items: [ {...}, ... ] }
+    const isArray = Array.isArray(req.body);
+    const items = isArray ? req.body
+                          : (Array.isArray(req.body?.items) ? req.body.items : null);
+
+    const phoneRaw = isArray ? (req.query.phone || req.body?.phone)
+                             : (req.body?.phone || req.query.phone);
+    const phone = normalizePhone(phoneRaw);
+
+    if (!phone || !items) {
+      return res.status(400).json({ success: false, error: "Required: phone and items[]" });
+    }
+
+    const phone_no_id = process.env.PHONE_NUMBER_ID;
+    if (!phone_no_id) {
+      return res.status(500).json({ success: false, error: "PHONE_NUMBER_ID not set" });
+    }
+
+    const lan = await getUserLan(phone);
+
+    let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\n\n" : "🛒 Ваш заказ:\n\n";
+    let totalAmount = 0;
+    const orderItems = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const productInfo = await getProductInfo(it.product_retailer_id);
+      const name = productInfo.title || `Товар ${it.product_retailer_id}`;
+      const price = Number(it.item_price) || 0;
+      const qty = Number(it.quantity) || 0;
+      const line = price * qty;
+
+      orderSummary += `${i + 1}. ${name}\n`;
+      orderSummary += lan === 'kg'
+        ? `Даанасы: ${qty} ${productInfo.measure_unit || 'шт'}\nБаасы: ${price} KGS x ${qty} = ${line} KGS\n\n`
+        : `Количество: ${qty} ${productInfo.measure_unit || 'шт'}\nЦена: ${price} KGS x ${qty} = ${line} KGS\n\n`;
+
+      totalAmount += line;
+      orderItems.push({
+        id: parseInt(productInfo.api_id),
+        title: name,
+        quantity: qty,
+        priceWithDiscount: null,
+        dealDiscountId: null,
+        modifierGroups: []
+      });
+    }
+
+    orderSummary += lan === 'kg'
+      ? `💰 Жалпы наркы: ${totalAmount} KGS\n\n`
+      : `💰 Общая стоимость: ${totalAmount} KGS\n\n`;
+
+    const userState = await getUserState(phone);
+
+    await calculateDeliveryAndSubmitOrder(
+      phone_no_id, phone, orderItems, totalAmount, orderSummary, userState
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (e) {
+    console.error("menu-order error:", e);
+    return res.status(500).json({ success: false, error: "Internal error" });
+  }
+});
+
 // ---------------------------- Stats / Cleanup / Root ----------------------------
 app.get("/stats", async (_req, res) => {
   try {
@@ -2078,17 +2002,18 @@ app.get("/", (_req, res) => {
   res.status(200).json({
     message: "WhatsApp Bot с MongoDB",
     status: "active",
-    version: "2.1.0",
+    version: "2.2.0",
     database: { connected: !!db, name: DB_NAME },
     features: [
       "MongoDB состояния",
       "Flow обработка",
-      "Каталог товаров",
+      "Сайт меню вместо каталога WhatsApp",
+      "Открытый POST /menu-order",
       "Уведомления о заказах",
       "AI-помощь в середине оформления заказа",
       "Возобновление процесса (resume checkpoint)"
     ],
-    endpoints: { webhook: "/webhook", flow: "/flow", orderStatus: "/order-status", stats: "/stats", cleanup: "/cleanup" }
+    endpoints: { webhook: "/webhook", flow: "/flow", menuOrder: "/menu-order", orderStatus: "/order-status", stats: "/stats", cleanup: "/cleanup" }
   });
 });
 
