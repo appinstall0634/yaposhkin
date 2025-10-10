@@ -1085,6 +1085,10 @@ async function handleCatalogOrderResponse(phone_no_id, from, message) {
   try {
     const order = message.order;
 
+    console.log(`catalog handle order is: ${order}`);
+    console.log(`catalog handle order2 is: ${order.product_items}`);
+    console.log(`catalog handle order3 is: ${message}`);
+
     let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\n\n" : "🛒 Ваш заказ:\n\n";
     let totalAmount = 0;
     const orderItems = [];
