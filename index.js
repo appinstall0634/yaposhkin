@@ -806,11 +806,30 @@ async function sendMenuLink(phone_no_id, to) {
     u.searchParams.set('locationId', locationId);
   }
 
-  const text = lan === 'kg'
-    ? `🍽️ Меню: ${u.toString()}\nТандап бүткөн соң заказ автоматтык келет.`
-    : `🍽️ Меню: ${u.toString()}\nПосле выбора заказ придёт автоматически.`;
+  const interactive = {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "cta_url",
+      header: { type: "text", text: lan === 'kg' ? "Абдан жакшы!" : "Отлично!" },
+      body: {
+        text: lan === 'kg'
+          ? "Төмөндөгү баскычты басып менюну көрүп буйрутма бериңиз."
+          : "Нажмите на кнопку ниже, чтобы посмотреть меню и сделать заказ."
+      },
+      footer: { text: "Yaposhkin Rolls" },
+      action: {
+        name: "cta_url",
+        parameters: {
+          display_text: lan === 'kg' ? "Менюну ачуу" : "Посмотреть меню",
+          url: u.toString()
+        }
+      }
+    }
+  };
 
-  await sendMessage(phone_no_id, to, text);
+  await sendWhatsAppMessage(phone_no_id, interactive);
   await setResumeCheckpoint(to, { kind: 'catalog' });
   await setUserWaitingState(to, WAITING_STATES.CATALOG_ORDER);
 }
