@@ -1425,20 +1425,51 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
   }
 }
 
+function computeOrderDueDateDeltaMinutes(state) {
+  if (!state) return 0;
+  if (state.preparation_time === 'specific' && state.specific_time) {
+    const [hh, mm] = String(state.specific_time).split(':').map(Number);
+    if (Number.isFinite(hh) && Number.isFinite(mm)) {
+      const now = new Date();
+      const due = new Date(now);
+      due.setHours(hh, mm, 0, 0);
+      let deltaMs = due - now;
+      if (deltaMs < 0) deltaMs += 24 * 60 * 60 * 1000; // на следующий день
+      return Math.round(deltaMs / 60000); // минуты
+    }
+  }
+  return 0; // ASAP
+}
+
 // ---------------------------- Submit order ----------------------------
 async function submitOrder(phone_no_id, from, orderItems, customerData, locationId, locationTitle, orderType, finalAmount, utensils_count) {
   const lan = await getUserLan(from);
   try {
+    const state = await getUserState(from);
+
+    const firstName =
+      (customerData?.customer?.first_name && customerData.customer.first_name !== 'Имя'
+        ? customerData.customer.first_name
+        : state?.customer_name) || 'Гость';
+
+    const orderDueDateDelta = computeOrderDueDateDeltaMinutes(state);
+
+    const commentParts = [];
+    if (state?.comment) commentParts.push(state.comment);
+    if (utensils_count && utensils_count !== '0') commentParts.push(`Количество приборов: ${utensils_count}`);
+    const comment = commentParts.join('\n') || '';
+
     const preorderData = {
       locationId: parseInt(locationId),
       locationTitle,
       type: orderType,
       customerContact: {
+        // firstName,
         firstName: "Test",
-        comment: (utensils_count && utensils_count !== '0') ? `Test\nКоличество приборов: ${utensils_count}` : `Test`,
+        comment,
         contactMethod: { type: "phoneNumber", value: from }
       },
-      orderDueDateDelta: 0,
+      orderDueDateDelta,             // 0 = ASAP, иначе минуты до нужного времени
       guests: [{ orderItems }],
       paymentSumWithDiscount: null
     };
