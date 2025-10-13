@@ -1893,7 +1893,7 @@ function computeOrderDueDateDeltaMinutes(state) {
       if (deltaMs < 0) deltaMs += 24 * 60 * 60 * 1000;
       const minutes = Math.round(deltaMs / 60000);
       console.log('⏰ [Order Time] Время приготовления:', state.specific_time, '(через', minutes, 'минут)');
-      return minutes;
+      return minutes*60;
     }
   }
   console.log('⏰ [Order Time] ASAP (как можно скорее)');
