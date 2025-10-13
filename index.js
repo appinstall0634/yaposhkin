@@ -1882,21 +1882,53 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
 }
 
 function computeOrderDueDateDeltaMinutes(state) {
-  if (!state) return 0;
-  if (state.preparation_time === 'specific' && state.specific_time) {
-    const [hh, mm] = String(state.specific_time).split(':').map(Number);
-    if (Number.isFinite(hh) && Number.isFinite(mm)) {
-      const now = new Date();
-      const due = new Date(now);
-      due.setHours(hh, mm, 0, 0);
-      let deltaMs = due - now;
-      if (deltaMs < 0) deltaMs += 24 * 60 * 60 * 1000;
-      const minutes = Math.round(deltaMs / 60000);
-      console.log('⏰ [Order Time] Время приготовления:', state.specific_time, '(через', minutes, 'минут)');
-      return minutes*60;
-    }
+  console.log('⏰ [Order Time] Вычисление времени приготовления');
+  
+  if (!state) {
+    console.log('⏰ [Order Time] Состояние отсутствует, ASAP');
+    return 0;
   }
-  console.log('⏰ [Order Time] ASAP (как можно скорее)');
+  
+  if (state.preparation_time === 'specific' && state.specific_time) {
+    console.log('⏰ [Order Time] Указано конкретное время:', state.specific_time);
+    
+    const [hh, mm] = String(state.specific_time).split(':').map(Number);
+    
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) {
+      console.log('⚠️ [Order Time] Неверный формат времени, ASAP');
+      return 0;
+    }
+
+    // ВАЖНО: Принудительно используем время Бишкека
+    const nowUTC = new Date();
+    const bishkekOffset = 6 * 60; // UTC+6 в минутах
+    const nowBishkek = new Date(nowUTC.getTime() + bishkekOffset * 60000);
+    
+    const dueBishkek = new Date(nowBishkek);
+    dueBishkek.setUTCHours(hh, mm, 0, 0);
+    
+    const currentHours = nowBishkek.getUTCHours();
+    const currentMinutes = nowBishkek.getUTCMinutes();
+    
+    console.log('🕐 [Order Time] ТЕКУЩЕЕ время (UTC):', nowUTC.toISOString());
+    console.log('🕐 [Order Time] ТЕКУЩЕЕ время (Бишкек):', 
+                `${currentHours.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`);
+    console.log('🕐 [Order Time] ЖЕЛАЕМОЕ время:', `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`);
+    
+    let deltaMs = dueBishkek - nowBishkek;
+    
+    if (deltaMs < 0) {
+      deltaMs += 24 * 60 * 60 * 1000;
+      console.log('📅 [Order Time] Заказ на следующий день');
+    }
+    
+    const minutes = Math.round(deltaMs / 60000);
+    console.log('✅ [Order Time] Разница:', minutes, 'минут');
+    
+    return minutes;
+  }
+  
+  console.log('⏰ [Order Time] ASAP');
   return 0;
 }
 
