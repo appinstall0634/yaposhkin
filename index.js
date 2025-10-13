@@ -1923,9 +1923,9 @@ function computeOrderDueDateDeltaMinutes(state) {
     }
     
     const minutes = Math.round(deltaMs / 60000);
-    console.log('✅ [Order Time] Разница:', minutes, 'минут');
+    console.log('✅ [Order Time] Разница:', minutes, 'минут', 'temp:', minutes*60);
     
-    return minutes;
+    return minutes*60;
   }
   
   console.log('⏰ [Order Time] ASAP');
