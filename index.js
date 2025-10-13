@@ -1750,6 +1750,11 @@ async function sendOrderSuccessMessage(phone_no_id, from, preorderResponse, orde
   }
 }
 
+app.use(body_parser.json({ type: ['application/json', 'text/plain'] }));
+// и на всякий случай:
+app.use(body_parser.text({ type: 'text/plain' }));
+
+
 // ---------------------------- Flow encryption endpoint ----------------------------
 app.post("/flow", async (req, res) => {
   try {
@@ -1880,6 +1885,10 @@ function getPrivateKey() {
 // ---------------------------- Order status notify API ----------------------------
 app.post("/order-status", async (req, res) => {
   try {
+    if (typeof req.body === 'string') {
+      try { req.body = JSON.parse(req.body); } catch {}
+    }
+
     const { phone, order_id, status, order_type, location_title, estimated_time, additional_info } = req.body;
     if (!phone || !order_id || !status) return res.status(400).json({ success: false, error: "Обязательные поля: phone, order_id, status" });
 
@@ -1972,6 +1981,9 @@ app.post("/menu-order", async (req, res) => {
     // Поддерживаем оба формата:
     // A) body = [ {product_retailer_id, quantity, item_price, currency}, ... ], phone в query ?phone=...
     // B) body = { phone, items: [ {...}, ... ] }
+    if (typeof req.body === 'string') {
+      try { req.body = JSON.parse(req.body); } catch {}
+    }
     const isArray = Array.isArray(req.body);
     const items = isArray ? req.body
                           : (Array.isArray(req.body?.items) ? req.body.items : null);
