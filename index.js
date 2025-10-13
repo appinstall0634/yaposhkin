@@ -1882,20 +1882,46 @@ async function sendPaymentQRCodeImproved(phone_no_id, to, amount) {
 }
 
 function computeOrderDueDateDeltaMinutes(state) {
-  if (!state) return 0;
-  if (state.preparation_time === 'specific' && state.specific_time) {
-    const [hh, mm] = String(state.specific_time).split(':').map(Number);
-    if (Number.isFinite(hh) && Number.isFinite(mm)) {
-      const now = new Date();
-      const due = new Date(now);
-      due.setHours(hh, mm, 0, 0);
-      let deltaMs = due - now;
-      if (deltaMs < 0) deltaMs += 24 * 60 * 60 * 1000;
-      const minutes = Math.round(deltaMs / 60000);
-      console.log('⏰ [Order Time] Время приготовления:', state.specific_time, '(через', minutes, 'минут)');
-      return minutes;
-    }
+  console.log('⏰ [Order Time] Вычисление времени приготовления');
+  
+  if (!state) {
+    console.log('⏰ [Order Time] Состояние отсутствует, ASAP');
+    return 0;
   }
+  
+  if (state.preparation_time === 'specific' && state.specific_time) {
+    console.log('⏰ [Order Time] Указано конкретное время:', state.specific_time);
+    
+    const [hh, mm] = String(state.specific_time).split(':').map(Number);
+    
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) {
+      console.log('⚠️ [Order Time] Неверный формат времени, ASAP');
+      return 0;
+    }
+
+    // Важно: используем часовой пояс Бишкека (UTC+6)
+    const nowBishkek = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bishkek" }));
+    const dueBishkek = new Date(nowBishkek);
+    dueBishkek.setHours(hh, mm, 0, 0);
+    
+    console.log('🕐 [Order Time] Текущее время в Бишкеке:', nowBishkek.toLocaleTimeString('ru-RU'));
+    console.log('🕐 [Order Time] Желаемое время:', dueBishkek.toLocaleTimeString('ru-RU'));
+    
+    let deltaMs = dueBishkek - nowBishkek;
+    
+    // Если время уже прошло сегодня, значит заказ на завтра
+    if (deltaMs < 0) {
+      deltaMs += 24 * 60 * 60 * 1000; // добавляем 24 часа
+      console.log('📅 [Order Time] Время на завтра');
+    }
+    
+    const minutes = Math.round(deltaMs / 60000);
+    console.log('✅ [Order Time] Разница:', minutes, 'минут');
+    console.log('✅ [Order Time] Заказ должен быть готов в:', `${hh}:${mm.toString().padStart(2, '0')}`);
+    
+    return minutes;
+  }
+  
   console.log('⏰ [Order Time] ASAP (как можно скорее)');
   return 0;
 }
