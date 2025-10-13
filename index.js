@@ -42,6 +42,10 @@ let initPromise = null;
 
 const IS_VERCEL = !!process.env.VERCEL;
 
+const cors = require('cors');
+app.use(cors({ origin: MENU_URL ? new URL(MENU_URL).origin : '*' }));
+
+
 // ---------------------------- States ----------------------------
 const WAITING_STATES = {
   NONE: 'none',
