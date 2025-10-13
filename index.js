@@ -252,9 +252,6 @@ function normalizePhone(p) {
   return String(p || '').replace(/[^\d]/g, '');
 }
 
-const cors = require('cors');
-app.use(cors({ origin: MENU_URL ? new URL(MENU_URL).origin : '*' }));
-
 
 // ---------------------------- Server start ----------------------------
 (async () => {
