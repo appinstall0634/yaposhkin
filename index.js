@@ -1482,6 +1482,8 @@ async function submitOrder(phone_no_id, from, orderItems, customerData, location
       paymentSumWithDiscount: null
     };
 
+    console.log(`preorderData is: ${preorderData}`);
+
     const preorderResponse = await axios.post(
       `${TEMIR_API_BASE}/qr/preorder/?qr_token=${customerData.qr_access_token}`, preorderData
     );
