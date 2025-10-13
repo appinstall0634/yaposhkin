@@ -66,6 +66,8 @@ const ERR = {
   MIN_AMOUNT:'MIN_AMOUNT',
 };
 
+const IS_VERCEL = !!process.env.VERCEL;
+
 // ---------------------------- AI Intent ----------------------------
 async function analyzeCustomerIntent(messageText) {
   try {
@@ -150,16 +152,20 @@ function analyzeIntentFallback(messageText) {
 }
 
 // ---------------------------- MongoDB Init ----------------------------
+
 async function initMongoDB() {
-  const client = new MongoClient(MONGODB_URI);
+  const uri = MONGODB_URI;
+  if (IS_VERCEL && (!uri || uri.startsWith('mongodb://localhost'))) {
+    throw new Error('Set remote MONGODB_URI (Atlas) for Vercel');
+  }
+  const client = new MongoClient(uri);
   await client.connect();
   db = client.db(DB_NAME);
   userStatesCollection = db.collection('user_states');
   userDataForOrderCollection = db.collection('user_orders');
-
   await userStatesCollection.createIndex({ phone: 1 });
-  await userDataForOrderCollection.createIndex({ phone: 1 });
   await userStatesCollection.createIndex({ updatedAt: 1 }, { expireAfterSeconds: 86400 });
+  await userDataForOrderCollection.createIndex({ phone: 1 });
   await userDataForOrderCollection.createIndex({ updatedAt: 1 }, { expireAfterSeconds: 86400 });
 }
 
@@ -246,15 +252,20 @@ function normalizePhone(p) {
   return String(p || '').replace(/[^\d]/g, '');
 }
 
+const cors = require('cors');
+app.use(cors({ origin: MENU_URL ? new URL(MENU_URL).origin : '*' }));
+
+
 // ---------------------------- Server start ----------------------------
-async function startServer() {
+(async () => {
   await initMongoDB();
-  await getAllProductsForSections(); // кэшим продукты (используются при маппинге id)
-  app.listen(PORT, () => {
-    console.log(`Server on http://localhost:${PORT}`);
-  });
-}
-startServer();
+  await getAllProductsForSections();
+  if (!IS_VERCEL) {
+    app.listen(PORT, () => console.log(`Server on http://localhost:${PORT}`));
+  }
+})();
+module.exports = app;
+
 
 // ---------------------------- Verify webhook ----------------------------
 app.get("/webhook", (req, res) => {
