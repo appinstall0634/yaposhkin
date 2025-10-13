@@ -1919,7 +1919,7 @@ function computeOrderDueDateDeltaMinutes(state) {
     console.log('✅ [Order Time] Разница:', minutes, 'минут');
     console.log('✅ [Order Time] Заказ должен быть готов в:', `${hh}:${mm.toString().padStart(2, '0')}`);
     
-    return minutes;
+    return minutes+60;
   }
   
   console.log('⏰ [Order Time] ASAP (как можно скорее)');
