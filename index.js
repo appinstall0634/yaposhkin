@@ -2666,6 +2666,23 @@ app.post("/menu-order", async (req, res) => {
       return res.status(500).json({ success: false, error: "PHONE_NUMBER_ID not set" });
     }
 
+    const currentWaitingState = await getUserWaitingState(phone);
+    console.log('🔍 [Menu Order] Текущее состояние:', currentWaitingState);
+
+    if (currentWaitingState !== WAITING_STATES.CATALOG_ORDER) {
+      console.log('⚠️ [Menu Order] Неверное состояние, заказ отклонен');
+      const lan = await getUserLan(phone);
+      const message = lan === 'kg' 
+        ? '⚠️ Буйрутма берүү мүмкүн эмес. Сураныч, баштан баштаңыз.' 
+        : '⚠️ Невозможно оформить заказ. Пожалуйста, начните процесс заново.';
+      
+      return res.status(403).json({ 
+        success: false, 
+        error: "Order not allowed in current state",
+        message: message
+      });
+    }
+
     const lan = await getUserLan(phone);
 
     let orderSummary = lan === 'kg' ? "🛒 Сиздин буйрутмаңыз:\n\n" : "🛒 Ваш заказ:\n\n";
