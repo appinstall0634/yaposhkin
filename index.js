@@ -487,6 +487,7 @@ app.post("/webhook", async (req, res) => {
       else if (message.type === "text" &&
               (currentWaitingState === WAITING_STATES.FLOW_RESPONSE || 
                currentWaitingState === WAITING_STATES.CATALOG_ORDER || 
+               currentWaitingState === WAITING_STATES.LOCATION ||
                currentWaitingState === WAITING_STATES.HELP_CONFIRM)) {
         console.log('❓ [Handler] Вопрос в середине оформления');
         await handleMidOrderHelp(phone_no_id, from, message, currentWaitingState, body_param);
